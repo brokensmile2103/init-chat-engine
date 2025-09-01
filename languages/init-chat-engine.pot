@@ -1,0 +1,566 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Init Chat Engine\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-06-27\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "A lightweight, community-focused chat system built with REST API and Vanilla JS. Embed anywhere using the [init_chatbox] shortcode."
+msgstr ""
+
+msgid "Init Chat Engine"
+msgstr ""
+
+msgid "Chat Engine"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Init Chat Engine Settings"
+msgstr ""
+
+msgid "To embed the chatbox, use the shortcode:"
+msgstr ""
+
+msgid "Version:"
+msgstr ""
+
+msgid "Manage Chat &rarr;"
+msgstr ""
+
+msgid "Basic Settings"
+msgstr ""
+
+msgid "Security"
+msgstr ""
+
+msgid "Advanced"
+msgstr ""
+
+# Basic Settings Tab
+msgid "User Access"
+msgstr ""
+
+msgid "Allow guests to send messages"
+msgstr ""
+
+msgid "When enabled, visitors who are not logged in can participate in the chat."
+msgstr ""
+
+msgid "Maximum Messages"
+msgstr ""
+
+msgid "Maximum number of messages to keep in the database. Older messages will be automatically deleted."
+msgstr ""
+
+msgid "Maximum Message Length"
+msgstr ""
+
+msgid "Maximum number of characters allowed per message."
+msgstr ""
+
+msgid "Display Options"
+msgstr ""
+
+msgid "Show user avatars"
+msgstr ""
+
+msgid "Show message timestamps"
+msgstr ""
+
+msgid "Notifications"
+msgstr ""
+
+msgid "Enable browser notifications"
+msgstr ""
+
+msgid "Show browser notifications when the tab is not focused. Requires HTTPS and user permission."
+msgstr ""
+
+msgid "Enable notification sounds"
+msgstr ""
+
+# Security Settings Tab
+msgid "Rate Limiting"
+msgstr ""
+
+msgid "messages per minute"
+msgstr ""
+
+msgid "Maximum number of messages a user can send per minute to prevent spam."
+msgstr ""
+
+msgid "Word Filtering"
+msgstr ""
+
+msgid "Enable word filtering"
+msgstr ""
+
+msgid "Block messages containing prohibited words."
+msgstr ""
+
+msgid "Blocked Words"
+msgstr ""
+
+msgid "Enter blocked words/phrases, one per line. Case-insensitive matching."
+msgstr ""
+
+msgid "Moderation"
+msgstr ""
+
+msgid "Require message moderation"
+msgstr ""
+
+msgid "All messages must be approved before appearing in the chat."
+msgstr ""
+
+msgid "Automatic Cleanup"
+msgstr ""
+
+msgid "days"
+msgstr ""
+
+msgid "Automatically delete old messages after this many days. Set to 0 to disable automatic cleanup."
+msgstr ""
+
+# Advanced Settings Tab
+msgid "Styling"
+msgstr ""
+
+msgid "Disable plugin CSS"
+msgstr ""
+
+msgid "Disable the default plugin styles to use your own custom CSS."
+msgstr ""
+
+msgid "Custom CSS"
+msgstr ""
+
+msgid "Add custom CSS styles for the chatbox. This will be added to the page when the shortcode is used."
+msgstr ""
+
+msgid "Database Information"
+msgstr ""
+
+msgid "Total Messages:"
+msgstr ""
+
+msgid "Active Bans:"
+msgstr ""
+
+msgid "Database Size:"
+msgstr ""
+
+msgid "Maintenance"
+msgstr ""
+
+msgid "Run Cleanup Now"
+msgstr ""
+
+msgid "Manually run the cleanup process to remove old messages and expired bans."
+msgstr ""
+
+msgid "Are you sure you want to run cleanup now? This will permanently delete old messages."
+msgstr ""
+
+# Validation Messages
+msgid "Maximum messages cannot be less than 10."
+msgstr ""
+
+msgid "Maximum messages cannot exceed 10,000."
+msgstr ""
+
+msgid "Maximum message length cannot be less than 50 characters."
+msgstr ""
+
+msgid "Maximum message length cannot exceed 2,000 characters."
+msgstr ""
+
+msgid "Rate limit cannot be less than 1 message per minute."
+msgstr ""
+
+msgid "Rate limit cannot exceed 100 messages per minute."
+msgstr ""
+
+msgid "Cleanup days must be at least 1 day or 0 to disable."
+msgstr ""
+
+msgid "Cleanup completed successfully."
+msgstr ""
+
+# Management Page
+msgid "Chat Management"
+msgstr ""
+
+msgid "Management"
+msgstr ""
+
+msgid "&larr; Back to Settings"
+msgstr ""
+
+msgid "Recent Messages"
+msgstr ""
+
+msgid "Banned Users"
+msgstr ""
+
+msgid "Statistics"
+msgstr ""
+
+msgid "User banned successfully."
+msgstr ""
+
+msgid "Failed to ban user."
+msgstr ""
+
+msgid "User unbanned successfully."
+msgstr ""
+
+msgid "Failed to unban user."
+msgstr ""
+
+msgid "Message deleted successfully."
+msgstr ""
+
+msgid "Failed to delete message."
+msgstr ""
+
+# Messages Management
+msgid "Search messages..."
+msgstr ""
+
+msgid "Search"
+msgstr ""
+
+msgid "Clear"
+msgstr ""
+
+msgid "Showing %1$d-%2$d of %3$d messages"
+msgstr ""
+
+msgid "User"
+msgstr ""
+
+msgid "Message"
+msgstr ""
+
+msgid "Date"
+msgstr ""
+
+msgid "IP Address"
+msgstr ""
+
+msgid "Actions"
+msgstr ""
+
+msgid "No messages found."
+msgstr ""
+
+msgid "Guest"
+msgstr ""
+
+msgid "View full message"
+msgstr ""
+
+msgid "ago"
+msgstr ""
+
+msgid "N/A"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Are you sure you want to delete this message?"
+msgstr ""
+
+msgid "Ban User"
+msgstr ""
+
+msgid "Are you sure you want to ban this user?"
+msgstr ""
+
+msgid "Banned"
+msgstr ""
+
+# Banned Users Management
+msgid "Found %d active bans. Expired bans are automatically cleaned up daily."
+msgstr ""
+
+msgid "Reason"
+msgstr ""
+
+msgid "Banned By"
+msgstr ""
+
+msgid "Banned Date"
+msgstr ""
+
+msgid "Expires"
+msgstr ""
+
+msgid "No banned users found."
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+msgid "Guest User"
+msgstr ""
+
+msgid "No reason provided"
+msgstr ""
+
+msgid "Permanent"
+msgstr ""
+
+msgid "Unban"
+msgstr ""
+
+msgid "Are you sure you want to unban this user?"
+msgstr ""
+
+# Statistics Management
+msgid "Chat Statistics"
+msgstr ""
+
+msgid "Messages Today"
+msgstr ""
+
+msgid "Registered Users"
+msgstr ""
+
+msgid "Guest Messages"
+msgstr ""
+
+msgid "Active Bans"
+msgstr ""
+
+msgid "Last Cleanup"
+msgstr ""
+
+msgid "Never"
+msgstr ""
+
+msgid "Daily Message Activity (Last 30 Days)"
+msgstr ""
+
+msgid "Messages"
+msgstr ""
+
+msgid "Activity"
+msgstr ""
+
+msgid "Top 10 Most Active Users"
+msgstr ""
+
+msgid "Last Activity"
+msgstr ""
+
+msgid "Quick Actions"
+msgstr ""
+
+msgid "Are you sure you want to run cleanup now? This will permanently delete old messages and expired bans."
+msgstr ""
+
+msgid "View All Messages"
+msgstr ""
+
+msgid "Manage Bans"
+msgstr ""
+
+msgid "System Information"
+msgstr ""
+
+msgid "Database Version:"
+msgstr ""
+
+msgid "Plugin Version:"
+msgstr ""
+
+msgid "Next Scheduled Cleanup:"
+msgstr ""
+
+msgid "Not scheduled"
+msgstr ""
+
+# REST API Error Messages
+msgid "You are banned from the chat."
+msgstr ""
+
+msgid "Invalid nonce."
+msgstr ""
+
+msgid "You are sending messages too quickly. Please slow down."
+msgstr ""
+
+msgid "Guests are not allowed to chat."
+msgstr ""
+
+msgid "Display name is required."
+msgstr ""
+
+msgid "Your message contains blocked words."
+msgstr ""
+
+msgid "Failed to save message."
+msgstr ""
+
+msgid "now"
+msgstr ""
+
+msgid "Display name is required for guests."
+msgstr ""
+
+msgid "Message not found."
+msgstr ""
+
+msgid "Banned by moderator"
+msgstr ""
+
+# Shortcode & Template Messages
+msgid "Access Restricted"
+msgstr ""
+
+msgid "You have been banned from participating in the chat."
+msgstr ""
+
+msgid "Reason:"
+msgstr ""
+
+msgid "Ban expires:"
+msgstr ""
+
+msgid "This ban is permanent."
+msgstr ""
+
+msgid "If you believe this is an error, please contact the site administrator."
+msgstr ""
+
+msgid "Loading messages..."
+msgstr ""
+
+msgid "Load older messages"
+msgstr ""
+
+msgid "You must <a href=\"%s\">log in</a> to join the chat."
+msgstr ""
+
+msgid "Please log in to participate in the conversation."
+msgstr ""
+
+msgid "Online"
+msgstr ""
+
+msgid "Loading..."
+msgstr ""
+
+msgid "Type a message..."
+msgstr ""
+
+msgid "Send"
+msgstr ""
+
+msgid "Please slow down..."
+msgstr ""
+
+msgid "Join the conversation"
+msgstr ""
+
+msgid "Enter your name to start chatting"
+msgstr ""
+
+msgid "Your name..."
+msgstr ""
+
+msgid "Join Chat"
+msgstr ""
+
+msgid "By joining, you agree to follow the community guidelines."
+msgstr ""
+
+msgid "Chatting as"
+msgstr ""
+
+msgid "Change name"
+msgstr ""
+
+msgid "Change"
+msgstr ""
+
+# JavaScript Localization
+msgid "No messages yet. Be the first to chat!"
+msgstr ""
+
+msgid "Missing name is required."
+msgstr ""
+
+msgid "Send failed"
+msgstr ""
+
+msgid "Network error"
+msgstr ""
+
+msgid "New messages"
+msgstr ""
+
+msgid "New message in the chat!"
+msgstr ""
+
+msgid "You have been banned from the chat."
+msgstr ""
+
+msgid "Message is too long."
+msgstr ""
+
+msgid "Rate limit exceeded"
+msgstr ""
+
+msgid "Message blocked"
+msgstr ""
+
+msgid "is typing..."
+msgstr ""
+
+msgid "Offline"
+msgstr ""
+
+msgid "Load more messages"
+msgstr ""
+
+msgid "Connection lost. Trying to reconnect..."
+msgstr ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "minutes ago"
+msgstr ""
+
+msgid "hours ago"
+msgstr ""
+
+msgid "days ago"
+msgstr ""
+
+# Stats Shortcode
+msgid "You do not have permission to view detailed statistics."
+msgstr ""
+
+msgid "Active Users:"
+msgstr ""
+
+msgid "guest messages"
+msgstr ""
+
+msgid "Today:"
+msgstr ""
+
+msgid "Yesterday:"
+msgstr ""
+
+msgid "in last %d days"
+msgstr ""

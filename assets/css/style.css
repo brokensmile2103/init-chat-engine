@@ -1,0 +1,1305 @@
+/* ==========================================================================
+   Init Chat Engine - Enhanced Dark Mode Support v1.2.0
+   ========================================================================== */
+
+/* CSS Variables for easy theming */
+:root {
+    --init-chat-primary: #0073aa;
+    --init-chat-primary-hover: #005f8d;
+    --init-chat-primary-light: #e7f3ff;
+    --init-chat-secondary: #6c757d;
+    --init-chat-success: #28a745;
+    --init-chat-danger: #dc3545;
+    --init-chat-warning: #ffc107;
+    --init-chat-info: #17a2b8;
+    --init-chat-light: #f8f9fa;
+    --init-chat-dark: #343a40;
+    --init-chat-border: #e1e5ea;
+    --init-chat-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    --init-chat-radius: 12px;
+    --init-chat-radius-sm: 8px;
+    --init-chat-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --init-chat-transition: all 0.2s ease;
+    
+    /* Light theme colors */
+    --init-chat-bg-primary: #ffffff;
+    --init-chat-bg-secondary: #f8f9fa;
+    --init-chat-bg-tertiary: #f7f9fb;
+    --init-chat-text-primary: #343a40;
+    --init-chat-text-secondary: #6c757d;
+    --init-chat-text-muted: #868e96;
+    --init-chat-input-bg: #f8f9fa;
+    --init-chat-input-border: #e9ecef;
+    --init-chat-message-bg: #ffffff;
+    --init-chat-message-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --init-chat-scrollbar-track: #f1f1f1;
+    --init-chat-scrollbar-thumb: #c1c1c1;
+    --init-chat-scrollbar-thumb-hover: #a8a8a8;
+}
+
+/* Dark theme variables */
+.init-chatbox-theme-dark {
+    --init-chat-primary: #4a9eff;
+    --init-chat-primary-hover: #3d8bdb;
+    --init-chat-primary-light: #1a2332;
+    --init-chat-secondary: #a0aec0;
+    --init-chat-success: #48bb78;
+    --init-chat-danger: #f56565;
+    --init-chat-warning: #ed8936;
+    --init-chat-info: #4299e1;
+    --init-chat-light: #2d3748;
+    --init-chat-dark: #e2e8f0;
+    --init-chat-border: #4a5568;
+    --init-chat-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    
+    /* Dark theme specific colors */
+    --init-chat-bg-primary: #1a202c;
+    --init-chat-bg-secondary: #2d3748;
+    --init-chat-bg-tertiary: #2a3441;
+    --init-chat-text-primary: #e2e8f0;
+    --init-chat-text-secondary: #a0aec0;
+    --init-chat-text-muted: #718096;
+    --init-chat-input-bg: #2d3748;
+    --init-chat-input-border: #4a5568;
+    --init-chat-message-bg: #2d3748;
+    --init-chat-message-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --init-chat-scrollbar-track: #2d3748;
+    --init-chat-scrollbar-thumb: #4a5568;
+    --init-chat-scrollbar-thumb-hover: #718096;
+}
+
+.ice-hidden {
+    display: none !important;
+}
+
+/* ==========================================================================
+   Base Wrapper & Container - ENHANCED DARK MODE
+   ========================================================================== */
+
+.init-chatbox-wrapper {
+    max-width: 500px;
+    margin: 40px auto;
+    background-color: var(--init-chat-bg-primary);
+    color: var(--init-chat-text-primary);
+    border-radius: var(--init-chat-radius);
+    box-shadow: var(--init-chat-shadow);
+    overflow: hidden;
+    font-family: var(--init-chat-font-family);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: var(--init-chat-transition);
+    border: 1px solid var(--init-chat-border);
+}
+
+.init-chatbox-wrapper:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* Enhanced dark theme support */
+.init-chatbox-theme-dark.init-chatbox-wrapper:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.init-chatbox-theme-minimal {
+    box-shadow: none;
+    border: 1px solid var(--init-chat-border);
+}
+
+.init-chatbox-theme-rounded {
+    border-radius: 24px;
+}
+
+/* ==========================================================================
+   Header - DARK MODE ENHANCED
+   ========================================================================== */
+
+.init-chatbox-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, var(--init-chat-primary), var(--init-chat-primary-hover));
+    color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.init-chatbox-theme-dark .init-chatbox-header {
+    border-bottom: 1px solid var(--init-chat-border);
+}
+
+.init-chatbox-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.init-chatbox-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.init-chatbox-online-count {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.init-chatbox-status-indicator {
+    width: 8px;
+    height: 8px;
+    background: #28a745;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* ==========================================================================
+   Messages Area - FULL DARK MODE SUPPORT
+   ========================================================================== */
+
+.init-chatbox-messages {
+    overflow-y: auto;
+    padding: 16px;
+    background: linear-gradient(to bottom, var(--init-chat-bg-tertiary), var(--init-chat-bg-primary));
+    border-bottom: 1px solid var(--init-chat-border);
+    position: relative;
+    padding-bottom: 20px;
+}
+
+.init-chatbox-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.init-chatbox-messages::-webkit-scrollbar-track {
+    background: var(--init-chat-scrollbar-track);
+    border-radius: 3px;
+}
+
+.init-chatbox-messages::-webkit-scrollbar-thumb {
+    background: var(--init-chat-scrollbar-thumb);
+    border-radius: 3px;
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-messages::-webkit-scrollbar-thumb:hover {
+    background: var(--init-chat-scrollbar-thumb-hover);
+}
+
+.init-chatbox-messages.shrink {
+    height: 115px;
+    min-height: 115px;
+    max-height: 115px;
+}
+
+.init-chatbox-messages.expand {
+    height: 320px;
+    min-height: 320px;
+    max-height: 320px;
+}
+
+/* Special case: when login required, make messages smaller */
+.init-chatbox-wrapper:has(.init-chatbox-login-required) .init-chatbox-messages {
+    height: 280px !important;
+    min-height: 280px !important;
+    max-height: 280px !important;
+}
+
+/* Loading State - DARK MODE */
+.init-chatbox-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    color: var(--init-chat-text-secondary);
+    gap: 12px;
+    flex-direction: column;
+}
+
+.init-chatbox-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--init-chat-border);
+    border-top: 3px solid var(--init-chat-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Empty State - DARK MODE */
+.init-chatbox-empty {
+    text-align: center;
+    color: var(--init-chat-text-secondary);
+    padding: 20px;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23e1e5ea"><path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>') no-repeat center top;
+    background-size: 48px 48px;
+    padding-top: 60px;
+}
+
+.init-chatbox-theme-dark .init-chatbox-empty {
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%234a5568"><path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>') no-repeat center top;
+    background-size: 48px 48px;
+}
+
+/* ==========================================================================
+   Individual Messages - ENHANCED DARK MODE
+   ========================================================================== */
+
+.init-chatbox-message {
+    margin-bottom: 16px;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.init-chatbox-message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 10px;
+}
+
+.init-chatbox-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.init-chatbox-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid var(--init-chat-bg-primary);
+    box-shadow: var(--init-chat-message-shadow);
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-avatar:hover {
+    transform: scale(1.05);
+}
+
+.init-chatbox-author {
+    font-weight: 600;
+    color: var(--init-chat-text-primary);
+    text-transform: capitalize;
+    font-size: 14px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.init-chatbox-meta-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex: 1;
+}
+
+.init-chatbox-meta-time {
+    color: var(--init-chat-text-secondary);
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-weight: 400;
+}
+
+.init-chatbox-message-body {
+    background: var(--init-chat-message-bg);
+    padding: 12px 16px;
+    border-radius: var(--init-chat-radius-sm);
+    color: var(--init-chat-text-primary);
+    word-break: break-word;
+    line-height: 1.5;
+    box-shadow: var(--init-chat-message-shadow);
+    border: 1px solid var(--init-chat-border);
+    position: relative;
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-message-body:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.init-chatbox-theme-dark .init-chatbox-message-body:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Current user messages */
+.init-chatbox-message.current-user .init-chatbox-message-body {
+    background: linear-gradient(135deg, var(--init-chat-primary), var(--init-chat-primary-hover));
+    color: white;
+    border-color: var(--init-chat-primary);
+    margin-left: 20px;
+}
+
+.init-chatbox-message.current-user .init-chatbox-author {
+    color: var(--init-chat-primary);
+    font-weight: 700;
+}
+
+/* Guest messages */
+.init-chatbox-message.guest-user .init-chatbox-author {
+    color: var(--init-chat-text-secondary);
+    font-style: italic;
+}
+
+.init-chatbox-message.guest-user .init-chatbox-author::after {
+    content: " (guest)";
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+/* ==========================================================================
+   Load More Button - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-load-more {
+    text-align: center;
+    padding: 10px;
+    border-bottom: 1px solid var(--init-chat-border);
+    background: linear-gradient(to bottom, var(--init-chat-bg-tertiary), var(--init-chat-bg-primary));
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.init-chatbox-load-more-btn {
+    background: transparent;
+    color: var(--init-chat-primary);
+    border: 1px solid var(--init-chat-primary);
+    padding: 6px 12px;
+    border-radius: 16px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: var(--init-chat-transition);
+    font-weight: 500;
+    min-height: 28px;
+}
+
+.init-chatbox-load-more-btn:hover {
+    background: var(--init-chat-primary);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.init-chatbox-load-more-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.init-chatbox-load-more-btn:disabled:hover {
+    background: transparent;
+    color: var(--init-chat-primary);
+}
+
+/* ==========================================================================
+   Typing Indicator - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-typing {
+    padding: 8px 16px;
+    background: rgba(74, 158, 255, 0.1);
+    border-radius: var(--init-chat-radius-sm);
+    margin: 8px 0;
+    opacity: 1;
+}
+
+.init-chatbox-theme-dark .init-chatbox-typing {
+    background: rgba(74, 158, 255, 0.15);
+}
+
+.init-chatbox-typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--init-chat-text-secondary);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.init-chatbox-typing-dots {
+    display: flex;
+    gap: 3px;
+}
+
+.init-chatbox-typing-dots span {
+    width: 4px;
+    height: 4px;
+    background: var(--init-chat-primary);
+    border-radius: 50%;
+    animation: typingSimple 1.4s infinite ease-in-out;
+}
+
+.init-chatbox-typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+.init-chatbox-typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typingSimple {
+    0%, 80%, 100% { 
+        transform: scale(0.8); 
+        opacity: 0.5; 
+    }
+    40% { 
+        transform: scale(1.2); 
+        opacity: 1; 
+    }
+}
+
+/* ==========================================================================
+   Connection Status - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-connection-status {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    z-index: 100;
+    opacity: 1;
+}
+
+.init-chatbox-theme-dark .init-chatbox-connection-status {
+    background: rgba(26, 32, 44, 0.9);
+    border: 1px solid var(--init-chat-border);
+}
+
+.init-chatbox-connection-status.reconnecting {
+    background: var(--init-chat-warning);
+    color: var(--init-chat-dark);
+}
+
+.init-chatbox-connection-status.connected {
+    background: var(--init-chat-success);
+}
+
+/* ==========================================================================
+   Form Styles - ENHANCED DARK MODE
+   ========================================================================== */
+
+.init-chatbox-input-wrapper {
+    background: var(--init-chat-bg-primary);
+    border-top: 1px solid var(--init-chat-border);
+    position: relative;
+    z-index: 5;
+    display: block !important;
+    visibility: visible !important;
+    min-height: 60px;
+    overflow: hidden;
+    border-bottom-left-radius: var(--init-chat-radius);
+    border-bottom-right-radius: var(--init-chat-radius);
+}
+
+.init-chatbox-form {
+    padding: 0;
+    margin: 0;
+}
+
+.init-chatbox-input-group {
+    display: flex;
+    gap: 8px;
+    padding: 16px;
+    align-items: flex-end;
+}
+
+.init-chatbox-input-name,
+.init-chatbox-input-message {
+    padding: 12px 16px;
+    border: 2px solid var(--init-chat-input-border);
+    border-radius: 24px;
+    outline: none;
+    flex: 1;
+    transition: var(--init-chat-transition);
+    font-size: 14px;
+    background: var(--init-chat-input-bg);
+    color: var(--init-chat-text-primary);
+    resize: none;
+    font-family: inherit;
+}
+
+.init-chatbox-input-message {
+    min-height: 20px;
+    max-height: 100px;
+    line-height: 1.4;
+}
+
+.init-chatbox-input-name::placeholder,
+.init-chatbox-input-message::placeholder {
+    color: var(--init-chat-text-muted);
+}
+
+.init-chatbox-input-name:focus,
+.init-chatbox-input-message:focus {
+    border-color: var(--init-chat-primary);
+    background: var(--init-chat-bg-primary);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1);
+}
+
+.init-chatbox-theme-dark .init-chatbox-input-name:focus,
+.init-chatbox-theme-dark .init-chatbox-input-message:focus {
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
+}
+
+.init-chatbox-submit {
+    background: linear-gradient(135deg, var(--init-chat-primary), var(--init-chat-primary-hover));
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 24px;
+    cursor: pointer;
+    transition: var(--init-chat-transition);
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 4px rgba(74, 158, 255, 0.2);
+}
+
+.init-chatbox-submit:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+}
+
+.init-chatbox-submit:active {
+    transform: translateY(0);
+}
+
+.init-chatbox-submit:disabled {
+    background: var(--init-chat-secondary);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+.init-chatbox-submit-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+/* ==========================================================================
+   Input Info & Character Count - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-input-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 16px 12px;
+    font-size: 11px;
+    color: var(--init-chat-text-secondary);
+}
+
+.init-chatbox-char-count {
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-char-count.warning {
+    color: var(--init-chat-warning);
+    font-weight: 600;
+}
+
+.init-chatbox-char-count.danger {
+    color: var(--init-chat-danger);
+    font-weight: 600;
+}
+
+.init-chatbox-rate-limit {
+    color: var(--init-chat-danger);
+    font-weight: 600;
+    opacity: 1;
+}
+
+/* ==========================================================================
+   Status Indicators - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-mini-status {
+    padding: 8px 16px;
+    background: rgba(74, 158, 255, 0.05);
+    border-bottom: 1px solid var(--init-chat-border);
+}
+
+.init-chatbox-theme-dark .init-chatbox-mini-status {
+    background: rgba(74, 158, 255, 0.1);
+}
+
+.init-chatbox-online-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--init-chat-text-secondary);
+}
+
+.init-chatbox-status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--init-chat-success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+/* ==========================================================================
+   Guest Interface - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-guest-wrapper {
+    background: var(--init-chat-bg-primary);
+    border-top: 1px solid var(--init-chat-border);
+    border-bottom-left-radius: var(--init-chat-radius);
+    border-bottom-right-radius: var(--init-chat-radius);
+    overflow: hidden;
+}
+
+.init-chatbox-name-form {
+    padding: 24px;
+    text-align: center;
+    background: linear-gradient(135deg, var(--init-chat-bg-secondary), var(--init-chat-bg-primary));
+}
+
+.init-chatbox-name-header {
+    margin-bottom: 20px;
+}
+
+.init-chatbox-name-header h4 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    color: var(--init-chat-text-primary);
+    font-weight: 600;
+}
+
+.init-chatbox-name-header p {
+    margin: 0;
+    color: var(--init-chat-text-secondary);
+    font-size: 14px;
+}
+
+.init-chatbox-name-input-group {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.init-chatbox-guest-notice {
+    color: var(--init-chat-text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    display: block;
+    margin: 0;
+}
+
+/* User Info for Active Guest - DARK MODE */
+.init-chatbox-user-info {
+    padding: 12px 16px;
+    background: var(--init-chat-bg-secondary);
+    border-bottom: 1px solid var(--init-chat-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.init-chatbox-current-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.init-chatbox-user-label {
+    color: var(--init-chat-text-secondary);
+    font-size: 12px;
+}
+
+.init-chatbox-user-name {
+    color: var(--init-chat-primary);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.init-chatbox-change-name {
+    background: none;
+    color: var(--init-chat-primary);
+    border: 1px solid var(--init-chat-primary);
+    padding: 4px 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: var(--init-chat-transition);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.init-chatbox-change-name:hover {
+    background: var(--init-chat-primary);
+    color: white;
+}
+
+.init-chatbox-change-icon {
+    font-size: 10px;
+}
+
+/* ==========================================================================
+   Login Required - ENHANCED DARK MODE
+   ========================================================================== */
+
+.init-chatbox-login-required {
+    display: flex !important;
+    align-items: center;
+    gap: 16px;
+    padding: 24px;
+    background: linear-gradient(135deg, var(--init-chat-bg-secondary), var(--init-chat-bg-primary));
+    text-align: left;
+    border-top: 1px solid var(--init-chat-border);
+    min-height: 80px;
+    position: relative;
+    z-index: 10;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.init-chatbox-input-wrapper .init-chatbox-login-required {
+    margin: 0;
+    border-radius: 0;
+    border-top: 1px solid var(--init-chat-border);
+}
+
+.init-chatbox-login-icon {
+    font-size: 32px;
+    opacity: 0.7;
+    flex-shrink: 0;
+    color: var(--init-chat-text-secondary);
+}
+
+.init-chatbox-login-content {
+    flex: 1;
+}
+
+.init-chatbox-login-content p {
+    margin: 0 0 8px 0;
+    color: var(--init-chat-text-primary);
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.init-chatbox-login-content small {
+    color: var(--init-chat-text-secondary);
+    font-size: 12px;
+    display: block;
+}
+
+.init-chatbox-login-required a {
+    color: var(--init-chat-primary);
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 1px solid transparent;
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-login-required a:hover {
+    color: var(--init-chat-primary-hover);
+    border-bottom-color: var(--init-chat-primary-hover);
+}
+
+/* ==========================================================================
+   Error & Success Messages - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-error,
+.init-chatbox-success {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    margin: 12px 16px;
+    border-radius: var(--init-chat-radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.init-chatbox-error {
+    background: #fff5f5;
+    color: var(--init-chat-danger);
+    border: 1px solid #fed7d7;
+}
+
+.init-chatbox-theme-dark .init-chatbox-error {
+    background: rgba(245, 101, 101, 0.1);
+    color: var(--init-chat-danger);
+    border: 1px solid rgba(245, 101, 101, 0.3);
+}
+
+.init-chatbox-success {
+    background: #f0fff4;
+    color: var(--init-chat-success);
+    border: 1px solid #9ae6b4;
+}
+
+.init-chatbox-theme-dark .init-chatbox-success {
+    background: rgba(72, 187, 120, 0.1);
+    color: var(--init-chat-success);
+    border: 1px solid rgba(72, 187, 120, 0.3);
+}
+
+.init-chatbox-error-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    color: inherit;
+    padding: 0;
+    line-height: 1;
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-error-close:hover {
+    transform: scale(1.1);
+}
+
+.init-chatbox-error-icon,
+.init-chatbox-success-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+/* ==========================================================================
+   Footer & Powered By - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-footer {
+    padding: 8px 16px;
+    background: var(--init-chat-bg-secondary);
+    border-top: 1px solid var(--init-chat-border);
+    text-align: center;
+}
+
+.init-chatbox-powered-by {
+    font-size: 10px;
+    color: var(--init-chat-text-secondary);
+    margin: 0;
+}
+
+.init-chatbox-powered-by a {
+    color: var(--init-chat-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.init-chatbox-powered-by a:hover {
+    text-decoration: underline;
+}
+
+/* ==========================================================================
+   Scroll to Bottom Button - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-scroll-to-bottom {
+    position: absolute;
+    bottom: 120px;
+    right: 16px;
+    background: var(--init-chat-primary);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 12px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-theme-dark .init-chatbox-scroll-to-bottom {
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+.init-chatbox-scroll-to-bottom:hover {
+    background: var(--init-chat-primary-hover);
+    transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Ban Message - DARK MODE
+   ========================================================================== */
+
+.init-chatbox-banned {
+    border: 1px solid var(--init-chat-danger);
+    border-radius: 8px;
+    padding: 20px;
+    background: rgba(245, 101, 101, 0.1);
+    color: var(--init-chat-danger);
+    text-align: center;
+    max-width: 500px;
+    margin: 20px auto;
+}
+
+.init-chatbox-theme-dark .init-chatbox-banned {
+    background: rgba(245, 101, 101, 0.15);
+    border-color: rgba(245, 101, 101, 0.5);
+}
+
+.init-chatbox-ban-notice {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    text-align: left;
+}
+
+.init-chatbox-ban-icon {
+    font-size: 48px;
+    line-height: 1;
+}
+
+.init-chatbox-ban-content h4 {
+    margin: 0 0 10px 0;
+    color: var(--init-chat-danger);
+    font-size: 18px;
+}
+
+.init-chatbox-ban-content p {
+    margin: 5px 0;
+    line-height: 1.4;
+    color: var(--init-chat-text-primary);
+}
+
+.init-chatbox-ban-content small {
+    color: var(--init-chat-text-secondary);
+    font-style: italic;
+}
+
+/* ==========================================================================
+   Stats Widget - DARK MODE
+   ========================================================================== */
+
+.init-chat-stats-widget {
+    background: var(--init-chat-bg-secondary);
+    border: 1px solid var(--init-chat-border);
+    border-radius: 6px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.init-chat-stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--init-chat-border);
+}
+
+.init-chat-stat-item:last-child {
+    border-bottom: none;
+}
+
+.init-chat-stat-label {
+    font-weight: 600;
+    color: var(--init-chat-text-primary);
+}
+
+.init-chat-stat-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--init-chat-primary);
+}
+
+.init-chat-stat-detail {
+    color: var(--init-chat-text-secondary);
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+.init-chat-stats-basic .init-chat-stat-item {
+    padding: 5px 0;
+}
+
+.init-chat-stats-basic .init-chat-stat-value {
+    font-size: 16px;
+}
+
+/* ==========================================================================
+   Responsive Design - ENHANCED FOR DARK MODE
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .init-chatbox-wrapper {
+        margin: 20px 16px;
+        max-width: none;
+        border-radius: var(--init-chat-radius-sm);
+    }
+    
+    .init-chatbox-messages.expand {
+        height: 300px;
+        min-height: 300px;
+        max-height: 300px;
+    }
+    
+    .init-chatbox-input-group {
+        padding: 12px;
+        flex-wrap: wrap;
+    }
+    
+    .init-chatbox-submit-text {
+        display: none;
+    }
+    
+    .init-chatbox-submit {
+        padding: 12px;
+        border-radius: 50%;
+        min-width: 44px;
+        min-height: 44px;
+        justify-content: center;
+    }
+    
+    .init-chatbox-name-input-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .init-chatbox-user-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .init-chatbox-header {
+        padding: 12px 16px;
+    }
+    
+    .init-chatbox-title {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .init-chatbox-wrapper {
+        margin: 10px;
+        border-radius: var(--init-chat-radius-sm);
+    }
+    
+    .init-chatbox-messages.expand {
+        height: 250px;
+        min-height: 250px;
+        max-height: 250px;
+    }
+    
+    .init-chatbox-login-required {
+        flex-direction: column;
+        text-align: center;
+        gap: 12px;
+    }
+    
+    .init-chatbox-message-body {
+        padding: 10px 12px;
+    }
+    
+    .init-chatbox-name-form {
+        padding: 16px;
+    }
+}
+
+/* ==========================================================================
+   Accessibility & Focus States - ENHANCED DARK MODE
+   ========================================================================== */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .init-chatbox-wrapper {
+        border-width: 2px;
+    }
+    
+    .init-chatbox-message-body {
+        border-width: 2px;
+    }
+    
+    .init-chatbox-submit {
+        border: 2px solid var(--init-chat-primary);
+    }
+    
+    .init-chatbox-theme-dark {
+        --init-chat-border: #718096;
+        --init-chat-text-secondary: #cbd5e0;
+    }
+}
+
+/* Reduced motion support - Disable ALL animations */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+    
+    .init-chatbox-typing-dots span {
+        animation: none !important;
+    }
+    
+    .init-chatbox-status-indicator {
+        animation: none !important;
+    }
+    
+    .init-chatbox-status-dot {
+        animation: none !important;
+    }
+}
+
+/* Dark mode OS preference support */
+@media (prefers-color-scheme: dark) {
+    .init-chatbox-wrapper:not(.init-chatbox-theme-dark):not(.init-chatbox-theme-light) {
+        --init-chat-primary: #4a9eff;
+        --init-chat-primary-hover: #3d8bdb;
+        --init-chat-primary-light: #1a2332;
+        --init-chat-secondary: #a0aec0;
+        --init-chat-success: #48bb78;
+        --init-chat-danger: #f56565;
+        --init-chat-warning: #ed8936;
+        --init-chat-info: #4299e1;
+        --init-chat-light: #2d3748;
+        --init-chat-dark: #e2e8f0;
+        --init-chat-border: #4a5568;
+        --init-chat-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        
+        --init-chat-bg-primary: #1a202c;
+        --init-chat-bg-secondary: #2d3748;
+        --init-chat-bg-tertiary: #2a3441;
+        --init-chat-text-primary: #e2e8f0;
+        --init-chat-text-secondary: #a0aec0;
+        --init-chat-text-muted: #718096;
+        --init-chat-input-bg: #2d3748;
+        --init-chat-input-border: #4a5568;
+        --init-chat-message-bg: #2d3748;
+        --init-chat-message-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        --init-chat-scrollbar-track: #2d3748;
+        --init-chat-scrollbar-thumb: #4a5568;
+        --init-chat-scrollbar-thumb-hover: #718096;
+    }
+}
+
+/* ==========================================================================
+   Performance Optimizations
+   ========================================================================== */
+
+/* Enable hardware acceleration for smooth scrolling */
+.init-chatbox-messages {
+    transform: translateZ(0);
+    will-change: scroll-position;
+}
+
+/* Optimize message rendering */
+.init-chatbox-message {
+    contain: layout style;
+}
+
+/* Optimize input rendering */
+.init-chatbox-input-message {
+    contain: layout;
+}
+
+/* ==========================================================================
+   Print Styles - DARK MODE AWARE
+   ========================================================================== */
+
+@media print {
+    .init-chatbox-wrapper {
+        box-shadow: none;
+        border: 1px solid #000;
+        background: white !important;
+        color: black !important;
+    }
+    
+    .init-chatbox-theme-dark.init-chatbox-wrapper {
+        background: white !important;
+        color: black !important;
+    }
+    
+    .init-chatbox-theme-dark .init-chatbox-message-body,
+    .init-chatbox-theme-dark .init-chatbox-messages {
+        background: white !important;
+        color: black !important;
+    }
+    
+    .init-chatbox-form,
+    .init-chatbox-input-wrapper,
+    .init-chatbox-name-form,
+    .init-chatbox-footer,
+    .init-chatbox-scroll-to-bottom {
+        display: none;
+    }
+    
+    .init-chatbox-messages {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+}
+
+/* ==========================================================================
+   Additional Dark Mode Utilities
+   ========================================================================== */
+
+/* Theme transition for smooth switching */
+.init-chatbox-wrapper,
+.init-chatbox-wrapper * {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Dark mode toggle button (if needed) */
+.init-chatbox-theme-toggle {
+    position: absolute;
+    top: 16px;
+    right: 80px;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 10px;
+    transition: var(--init-chat-transition);
+}
+
+.init-chatbox-theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Selection colors for dark mode */
+.init-chatbox-theme-dark ::selection {
+    background: rgba(74, 158, 255, 0.3);
+    color: var(--init-chat-text-primary);
+}
+
+.init-chatbox-theme-dark ::-moz-selection {
+    background: rgba(74, 158, 255, 0.3);
+    color: var(--init-chat-text-primary);
+}

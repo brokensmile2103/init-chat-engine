@@ -1,0 +1,566 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Init Chat Engine\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-06-27\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "A lightweight, community-focused chat system built with REST API and Vanilla JS. Embed anywhere using the [init_chatbox] shortcode."
+msgstr "Một hệ thống chat gọn nhẹ, hướng tới cộng đồng, được xây dựng bằng REST API và Vanilla JS. Có thể nhúng ở bất kỳ đâu bằng shortcode [init_chatbox]."
+
+msgid "Init Chat Engine"
+msgstr "Init Chat Engine"
+
+msgid "Chat Engine"
+msgstr "Chat Engine"
+
+msgid "Settings"
+msgstr "Cài đặt"
+
+msgid "Init Chat Engine Settings"
+msgstr "Cài đặt Init Chat Engine"
+
+msgid "To embed the chatbox, use the shortcode:"
+msgstr "Để nhúng hộp chat, sử dụng shortcode:"
+
+msgid "Version:"
+msgstr "Phiên bản:"
+
+msgid "Manage Chat &rarr;"
+msgstr "Quản lý Chat &rarr;"
+
+msgid "Basic Settings"
+msgstr "Cài đặt Cơ bản"
+
+msgid "Security"
+msgstr "Bảo mật"
+
+msgid "Advanced"
+msgstr "Nâng cao"
+
+# Basic Settings Tab
+msgid "User Access"
+msgstr "Quyền truy cập"
+
+msgid "Allow guests to send messages"
+msgstr "Cho phép khách gửi tin nhắn"
+
+msgid "When enabled, visitors who are not logged in can participate in the chat."
+msgstr "Khi bật, khách chưa đăng nhập có thể tham gia chat."
+
+msgid "Maximum Messages"
+msgstr "Số tin nhắn tối đa"
+
+msgid "Maximum number of messages to keep in the database. Older messages will be automatically deleted."
+msgstr "Số lượng tin nhắn tối đa lưu trong cơ sở dữ liệu. Tin nhắn cũ sẽ tự động bị xóa."
+
+msgid "Maximum Message Length"
+msgstr "Độ dài tin nhắn tối đa"
+
+msgid "Maximum number of characters allowed per message."
+msgstr "Số ký tự tối đa cho phép mỗi tin nhắn."
+
+msgid "Display Options"
+msgstr "Tùy chọn hiển thị"
+
+msgid "Show user avatars"
+msgstr "Hiển thị avatar người dùng"
+
+msgid "Show message timestamps"
+msgstr "Hiển thị thời gian tin nhắn"
+
+msgid "Notifications"
+msgstr "Thông báo"
+
+msgid "Enable browser notifications"
+msgstr "Bật thông báo trình duyệt"
+
+msgid "Show browser notifications when the tab is not focused. Requires HTTPS and user permission."
+msgstr "Hiển thị thông báo trình duyệt khi tab không được focus. Yêu cầu HTTPS và quyền của người dùng."
+
+msgid "Enable notification sounds"
+msgstr "Bật âm thanh thông báo"
+
+# Security Settings Tab
+msgid "Rate Limiting"
+msgstr "Giới hạn tốc độ"
+
+msgid "messages per minute"
+msgstr "tin nhắn mỗi phút"
+
+msgid "Maximum number of messages a user can send per minute to prevent spam."
+msgstr "Số lượng tin nhắn tối đa một người dùng có thể gửi mỗi phút để chống spam."
+
+msgid "Word Filtering"
+msgstr "Lọc từ khóa"
+
+msgid "Enable word filtering"
+msgstr "Bật lọc từ khóa"
+
+msgid "Block messages containing prohibited words."
+msgstr "Chặn tin nhắn chứa từ bị cấm."
+
+msgid "Blocked Words"
+msgstr "Từ bị cấm"
+
+msgid "Enter blocked words/phrases, one per line. Case-insensitive matching."
+msgstr "Nhập từ/cụm từ bị cấm, mỗi dòng một từ. Không phân biệt chữ hoa thường."
+
+msgid "Moderation"
+msgstr "Kiểm duyệt"
+
+msgid "Require message moderation"
+msgstr "Yêu cầu kiểm duyệt tin nhắn"
+
+msgid "All messages must be approved before appearing in the chat."
+msgstr "Tất cả tin nhắn phải được duyệt trước khi xuất hiện trong chat."
+
+msgid "Automatic Cleanup"
+msgstr "Dọn dẹp tự động"
+
+msgid "days"
+msgstr "ngày"
+
+msgid "Automatically delete old messages after this many days. Set to 0 to disable automatic cleanup."
+msgstr "Tự động xóa tin nhắn cũ sau số ngày này. Đặt 0 để tắt dọn dẹp tự động."
+
+# Advanced Settings Tab
+msgid "Styling"
+msgstr "Giao diện"
+
+msgid "Disable plugin CSS"
+msgstr "Tắt CSS của plugin"
+
+msgid "Disable the default plugin styles to use your own custom CSS."
+msgstr "Tắt style mặc định của plugin để sử dụng CSS tùy chỉnh."
+
+msgid "Custom CSS"
+msgstr "CSS tùy chỉnh"
+
+msgid "Add custom CSS styles for the chatbox. This will be added to the page when the shortcode is used."
+msgstr "Thêm CSS tùy chỉnh cho hộp chat. Sẽ được thêm vào trang khi sử dụng shortcode."
+
+msgid "Database Information"
+msgstr "Thông tin cơ sở dữ liệu"
+
+msgid "Total Messages:"
+msgstr "Tổng tin nhắn:"
+
+msgid "Active Bans:"
+msgstr "Lệnh cấm đang hoạt động:"
+
+msgid "Database Size:"
+msgstr "Kích thước cơ sở dữ liệu:"
+
+msgid "Maintenance"
+msgstr "Bảo trì"
+
+msgid "Run Cleanup Now"
+msgstr "Chạy dọn dẹp ngay"
+
+msgid "Manually run the cleanup process to remove old messages and expired bans."
+msgstr "Chạy thủ công quá trình dọn dẹp để xóa tin nhắn cũ và lệnh cấm hết hạn."
+
+msgid "Are you sure you want to run cleanup now? This will permanently delete old messages."
+msgstr "Bạn có chắc muốn chạy dọn dẹp ngay? Điều này sẽ xóa vĩnh viễn tin nhắn cũ."
+
+# Validation Messages
+msgid "Maximum messages cannot be less than 10."
+msgstr "Số tin nhắn tối đa không thể nhỏ hơn 10."
+
+msgid "Maximum messages cannot exceed 10,000."
+msgstr "Số tin nhắn tối đa không thể vượt quá 10.000."
+
+msgid "Maximum message length cannot be less than 50 characters."
+msgstr "Độ dài tin nhắn tối đa không thể nhỏ hơn 50 ký tự."
+
+msgid "Maximum message length cannot exceed 2,000 characters."
+msgstr "Độ dài tin nhắn tối đa không thể vượt quá 2.000 ký tự."
+
+msgid "Rate limit cannot be less than 1 message per minute."
+msgstr "Giới hạn tốc độ không thể nhỏ hơn 1 tin nhắn mỗi phút."
+
+msgid "Rate limit cannot exceed 100 messages per minute."
+msgstr "Giới hạn tốc độ không thể vượt quá 100 tin nhắn mỗi phút."
+
+msgid "Cleanup days must be at least 1 day or 0 to disable."
+msgstr "Số ngày dọn dẹp phải ít nhất 1 ngày hoặc 0 để tắt."
+
+msgid "Cleanup completed successfully."
+msgstr "Dọn dẹp hoàn thành thành công."
+
+# Management Page
+msgid "Chat Management"
+msgstr "Quản lý Chat"
+
+msgid "Management"
+msgstr "Quản lý tin nhắn"
+
+msgid "&larr; Back to Settings"
+msgstr "&larr; Quay lại Cài đặt"
+
+msgid "Recent Messages"
+msgstr "Tin nhắn gần đây"
+
+msgid "Banned Users"
+msgstr "Người dùng bị cấm"
+
+msgid "Statistics"
+msgstr "Thống kê"
+
+msgid "User banned successfully."
+msgstr "Cấm người dùng thành công."
+
+msgid "Failed to ban user."
+msgstr "Không thể cấm người dùng."
+
+msgid "User unbanned successfully."
+msgstr "Bỏ cấm người dùng thành công."
+
+msgid "Failed to unban user."
+msgstr "Không thể bỏ cấm người dùng."
+
+msgid "Message deleted successfully."
+msgstr "Xóa tin nhắn thành công."
+
+msgid "Failed to delete message."
+msgstr "Không thể xóa tin nhắn."
+
+# Messages Management
+msgid "Search messages..."
+msgstr "Tìm kiếm tin nhắn..."
+
+msgid "Search"
+msgstr "Tìm kiếm"
+
+msgid "Clear"
+msgstr "Xóa"
+
+msgid "Showing %1$d-%2$d of %3$d messages"
+msgstr "Hiển thị %1$d-%2$d trong %3$d tin nhắn"
+
+msgid "User"
+msgstr "Người dùng"
+
+msgid "Message"
+msgstr "Tin nhắn"
+
+msgid "Date"
+msgstr "Ngày"
+
+msgid "IP Address"
+msgstr "Địa chỉ IP"
+
+msgid "Actions"
+msgstr "Hành động"
+
+msgid "No messages found."
+msgstr "Không tìm thấy tin nhắn nào."
+
+msgid "Guest"
+msgstr "Khách"
+
+msgid "View full message"
+msgstr "Xem tin nhắn đầy đủ"
+
+msgid "ago"
+msgstr "trước"
+
+msgid "N/A"
+msgstr "Không có"
+
+msgid "Delete"
+msgstr "Xóa"
+
+msgid "Are you sure you want to delete this message?"
+msgstr "Bạn có chắc muốn xóa tin nhắn này?"
+
+msgid "Ban User"
+msgstr "Cấm người dùng"
+
+msgid "Are you sure you want to ban this user?"
+msgstr "Bạn có chắc muốn cấm người dùng này?"
+
+msgid "Banned"
+msgstr "Đã bị cấm"
+
+# Banned Users Management
+msgid "Found %d active bans. Expired bans are automatically cleaned up daily."
+msgstr "Tìm thấy %d lệnh cấm đang hoạt động. Lệnh cấm hết hạn được dọn dẹp tự động hàng ngày."
+
+msgid "Reason"
+msgstr "Lý do"
+
+msgid "Banned By"
+msgstr "Bị cấm bởi"
+
+msgid "Banned Date"
+msgstr "Ngày bị cấm"
+
+msgid "Expires"
+msgstr "Hết hạn"
+
+msgid "No banned users found."
+msgstr "Không tìm thấy người dùng nào bị cấm."
+
+msgid "Unknown"
+msgstr "Không rõ"
+
+msgid "Guest User"
+msgstr "Người dùng khách"
+
+msgid "No reason provided"
+msgstr "Không có lý do"
+
+msgid "Permanent"
+msgstr "Vĩnh viễn"
+
+msgid "Unban"
+msgstr "Bỏ cấm"
+
+msgid "Are you sure you want to unban this user?"
+msgstr "Bạn có chắc muốn bỏ cấm người dùng này?"
+
+# Statistics Management
+msgid "Chat Statistics"
+msgstr "Thống kê Chat"
+
+msgid "Messages Today"
+msgstr "Tin nhắn hôm nay"
+
+msgid "Registered Users"
+msgstr "Người dùng đã đăng ký"
+
+msgid "Guest Messages"
+msgstr "Tin nhắn khách"
+
+msgid "Active Bans"
+msgstr "Lệnh cấm đang hoạt động"
+
+msgid "Last Cleanup"
+msgstr "Lần dọn dẹp cuối"
+
+msgid "Never"
+msgstr "Chưa bao giờ"
+
+msgid "Daily Message Activity (Last 30 Days)"
+msgstr "Hoạt động tin nhắn hàng ngày (30 ngày qua)"
+
+msgid "Messages"
+msgstr "Tin nhắn"
+
+msgid "Activity"
+msgstr "Hoạt động"
+
+msgid "Top 10 Most Active Users"
+msgstr "Top 10 người dùng tích cực nhất"
+
+msgid "Last Activity"
+msgstr "Hoạt động cuối"
+
+msgid "Quick Actions"
+msgstr "Hành động nhanh"
+
+msgid "Are you sure you want to run cleanup now? This will permanently delete old messages and expired bans."
+msgstr "Bạn có chắc muốn chạy dọn dẹp ngay? Điều này sẽ xóa vĩnh viễn tin nhắn cũ và lệnh cấm hết hạn."
+
+msgid "View All Messages"
+msgstr "Xem tất cả tin nhắn"
+
+msgid "Manage Bans"
+msgstr "Quản lý lệnh cấm"
+
+msgid "System Information"
+msgstr "Thông tin hệ thống"
+
+msgid "Database Version:"
+msgstr "Phiên bản cơ sở dữ liệu:"
+
+msgid "Plugin Version:"
+msgstr "Phiên bản plugin:"
+
+msgid "Next Scheduled Cleanup:"
+msgstr "Lần dọn dẹp tiếp theo:"
+
+msgid "Not scheduled"
+msgstr "Chưa lên lịch"
+
+# REST API Error Messages
+msgid "You are banned from the chat."
+msgstr "Bạn đã bị cấm khỏi chat."
+
+msgid "Invalid nonce."
+msgstr "Nonce không hợp lệ."
+
+msgid "You are sending messages too quickly. Please slow down."
+msgstr "Bạn đang gửi tin nhắn quá nhanh. Vui lòng chậm lại."
+
+msgid "Guests are not allowed to chat."
+msgstr "Khách không được phép chat."
+
+msgid "Display name is required."
+msgstr "Tên hiển thị là bắt buộc."
+
+msgid "Your message contains blocked words."
+msgstr "Tin nhắn của bạn chứa từ bị cấm."
+
+msgid "Failed to save message."
+msgstr "Không thể lưu tin nhắn."
+
+msgid "now"
+msgstr "bây giờ"
+
+msgid "Display name is required for guests."
+msgstr "Tên hiển thị là bắt buộc cho khách."
+
+msgid "Message not found."
+msgstr "Không tìm thấy tin nhắn."
+
+msgid "Banned by moderator"
+msgstr "Bị cấm bởi người kiểm duyệt"
+
+# Shortcode & Template Messages
+msgid "Access Restricted"
+msgstr "Quyền truy cập bị hạn chế"
+
+msgid "You have been banned from participating in the chat."
+msgstr "Bạn đã bị cấm tham gia chat."
+
+msgid "Reason:"
+msgstr "Lý do:"
+
+msgid "Ban expires:"
+msgstr "Lệnh cấm hết hạn:"
+
+msgid "This ban is permanent."
+msgstr "Lệnh cấm này là vĩnh viễn."
+
+msgid "If you believe this is an error, please contact the site administrator."
+msgstr "Nếu bạn cho rằng đây là lỗi, vui lòng liên hệ quản trị viên."
+
+msgid "Loading messages..."
+msgstr "Đang tải tin nhắn..."
+
+msgid "Load older messages"
+msgstr "Tải tin nhắn cũ hơn"
+
+msgid "You must <a href=\"%s\">log in</a> to join the chat."
+msgstr "Bạn phải <a href=\"%s\">đăng nhập</a> để tham gia chat."
+
+msgid "Please log in to participate in the conversation."
+msgstr "Vui lòng đăng nhập để tham gia cuộc trò chuyện."
+
+msgid "Online"
+msgstr "Trực tuyến"
+
+msgid "Loading..."
+msgstr "Đang tải..."
+
+msgid "Type a message..."
+msgstr "Nhập tin nhắn..."
+
+msgid "Send"
+msgstr "Gửi"
+
+msgid "Please slow down..."
+msgstr "Vui lòng chậm lại..."
+
+msgid "Join the conversation"
+msgstr "Tham gia cuộc trò chuyện"
+
+msgid "Enter your name to start chatting"
+msgstr "Nhập tên để bắt đầu chat"
+
+msgid "Your name..."
+msgstr "Tên của bạn..."
+
+msgid "Join Chat"
+msgstr "Tham gia Chat"
+
+msgid "By joining, you agree to follow the community guidelines."
+msgstr "Bằng cách tham gia, bạn đồng ý tuân theo quy tắc cộng đồng."
+
+msgid "Chatting as"
+msgstr "Đang chat với tên"
+
+msgid "Change name"
+msgstr "Đổi tên"
+
+msgid "Change"
+msgstr "Đổi"
+
+# JavaScript Localization
+msgid "No messages yet. Be the first to chat!"
+msgstr "Chưa có tin nhắn nào. Hãy là người đầu tiên chat!"
+
+msgid "Missing name is required."
+msgstr "Tên là bắt buộc."
+
+msgid "Send failed"
+msgstr "Gửi thất bại"
+
+msgid "Network error"
+msgstr "Lỗi mạng"
+
+msgid "New messages"
+msgstr "Tin nhắn mới"
+
+msgid "New message in the chat!"
+msgstr "Tin nhắn mới trong chat!"
+
+msgid "You have been banned from the chat."
+msgstr "Bạn đã bị cấm khỏi chat."
+
+msgid "Message is too long."
+msgstr "Tin nhắn quá dài."
+
+msgid "Rate limit exceeded"
+msgstr "Vượt quá giới hạn tốc độ"
+
+msgid "Message blocked"
+msgstr "Tin nhắn bị chặn"
+
+msgid "is typing..."
+msgstr "đang gõ..."
+
+msgid "Offline"
+msgstr "Ngoại tuyến"
+
+msgid "Load more messages"
+msgstr "Tải thêm tin nhắn"
+
+msgid "Connection lost. Trying to reconnect..."
+msgstr "Mất kết nối. Đang thử kết nối lại..."
+
+msgid "Connected"
+msgstr "Đã kết nối"
+
+msgid "minutes ago"
+msgstr "phút trước"
+
+msgid "hours ago"
+msgstr "giờ trước"
+
+msgid "days ago"
+msgstr "ngày trước"
+
+# Stats Shortcode
+msgid "You do not have permission to view detailed statistics."
+msgstr "Bạn không có quyền xem thống kê chi tiết."
+
+msgid "Active Users:"
+msgstr "Người dùng tích cực:"
+
+msgid "guest messages"
+msgstr "tin nhắn khách"
+
+msgid "Today:"
+msgstr "Hôm nay:"
+
+msgid "Yesterday:"
+msgstr "Hôm qua:"
+
+msgid "in last %d days"
+msgstr "trong %d ngày qua"
