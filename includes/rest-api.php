@@ -300,8 +300,8 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
     $current_user = wp_get_current_user();
     $user_id = $current_user->exists() ? $current_user->ID : null;
 
-    $message = trim( $request->get_param( 'message' ) );
-    $display_name = $user_id ? $current_user->display_name : trim( $request->get_param( 'display_name' ) );
+    $message = wp_strip_all_tags( trim( $request->get_param( 'message' ) ) );
+    $display_name = $user_id ? wp_strip_all_tags( $current_user->display_name ) : wp_strip_all_tags( trim( $request->get_param( 'display_name' ) ) );
 
     // Additional validation
     if ( ! $user_id && ! $allow_guests ) {

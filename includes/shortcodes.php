@@ -292,6 +292,13 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = [] ) {
  * Check if word filtering is enabled and message contains blocked words
  */
 function init_plugin_suite_chat_engine_check_message_content( $message ) {
+    // Strip tags và trim tất cả khoảng trắng, unicode space
+    $clean_message = trim( wp_strip_all_tags( preg_replace( '/[\p{C}\p{Z}]+/u', '', $message ) ) );
+    
+    if ( $clean_message === '' ) {
+        return false; // Message rỗng hoặc toàn kí tự trắng/invisible
+    }
+
     $settings = init_plugin_suite_chat_engine_get_all_settings();
     
     if ( empty( $settings['enable_word_filter'] ) || empty( $settings['blocked_words'] ) ) {

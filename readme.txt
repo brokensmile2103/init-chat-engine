@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.1.7
+Stable tag: 1.1.8
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -121,6 +121,14 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.1.8 – September 13, 2025 =
+- Hardened `/send` security for logged-in users: strictly validate `X-WP-Nonce` and block cross-site POST attempts
+- Sanitized inputs on the server before storage: apply `wp_strip_all_tags()` to both `message` and `display_name` (logged-in and guest paths)
+- Rejected empty or non-visible messages: now fails fast on whitespace-/zero-width-/control-character–only content
+- Enforced length limits server-side (pre-insert) to prevent oversized payloads; behavior matches UI constraints
+- Kept output defense-in-depth: responses continue to use `wp_kses_post()` for message rendering
+- Tightened server-side anti-abuse: permission callback rate-limit check remains authoritative (in addition to any client throttling)
 
 = 1.1.7 – September 13, 2025 =
 - Updated URL auto-linking logic to only apply when the link matches the current site domain
