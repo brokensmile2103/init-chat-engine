@@ -315,6 +315,22 @@ document.addEventListener('DOMContentLoaded', function () {
             text = text.slice(2, -2);
         }
 
+        // Lấy domain hiện tại (bỏ www.)
+        const currentHost = (typeof location !== 'undefined' ? location.hostname : '')
+            .replace(/^www\./i, '');
+
+        const isSameSite = (url) => {
+            try {
+                const u = new URL(url);
+                const host = u.hostname.replace(/^www\./i, '');
+                // nếu muốn cho phép subdomain, đổi thành:
+                // return host === currentHost || host.endsWith('.' + currentHost);
+                return host === currentHost;
+            } catch {
+                return false;
+            }
+        };
+
         const rules = [
             { 
                 // *text* - bold (1 trong 2 đầu có khoảng trắng, không có space sát dấu)
@@ -348,11 +364,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 captureGroup: [2, 4]
             },
             { 
-                // URLs
+                // URLs (chỉ link nếu cùng domain)
                 regex: /(https?:\/\/[^\s]+)/g, 
                 tag: 'a', 
                 attr: 'href="$1" target="_blank" rel="noopener"',
-                attrGroup: 1 // dùng $1 từ regex
+                attrGroup: 1,
+                domainRestrict: true
             }
         ];
 
@@ -378,6 +395,17 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             result += escapeHTML(text.slice(cursor, earliest.index));
+
+            // Xử lý riêng cho URL: nếu khác domain, giữ nguyên text, không bọc <a>
+            if (matchedRule.tag === 'a' && matchedRule.domainRestrict) {
+                const urlStr = earliest[matchedRule.attrGroup || 0] || earliest[0];
+                if (!isSameSite(urlStr)) {
+                    // chỉ thêm text đã escape, không link
+                    result += escapeHTML(earliest[0]);
+                    cursor = earliest.index + earliest[0].length;
+                    continue;
+                }
+            }
 
             let inner;
             if (matchedRule.captureGroup) {
@@ -411,8 +439,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // ===== Emoji enlarge on client (server marker ưu tiên)
-        // Nếu đã có marker hoặc fallback nhận diện emoji thuần, và KHÔNG có <img> (sticker),
-        // thì bọc kết quả để phóng to.
         if (emojiBig && !/<img\b/i.test(result)) {
             result = `<span class="uk-emoji-xlarge">${result}</span>`;
         }

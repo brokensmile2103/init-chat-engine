@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.1.6
+Stable tag: 1.1.7
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -13,6 +13,10 @@ A lightweight, real-time community chat system built with REST API and Vanilla J
 == Description ==
 
 Init Chat Engine is a clean and minimal frontend chatbox plugin, designed for homepage or site-wide communication with comprehensive administrative controls.
+
+This plugin is the core user system behind the [Init Plugin Suite](https://en.inithtml.com/init-plugin-suite-minimalist-powerful-and-free-wordpress-plugins/) – optimized for frontend-first interaction, extensibility, and real-time gamification.
+
+GitHub repository: [https://github.com/brokensmile2103/init-chat-engine](https://github.com/brokensmile2103/init-chat-engine)
 
 **Key Features:**
 
@@ -63,7 +67,7 @@ Perfect for community-based sites, forums, fanpages, manga readers, SaaS dashboa
 
 == Shortcode Attributes ==
 
-`[init_chatbox]` supports the following attributes:
+Shortcode `[init_chatbox]` supports the following attributes:
 
 - `height` - Set chat height (e.g., `height="400px"`)
 - `width` - Set chat width (e.g., `width="100%"`)
@@ -117,6 +121,13 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.1.7 – September 13, 2025 =
+- Updated URL auto-linking logic to only apply when the link matches the current site domain
+- Prevented external or mismatched-domain links from being auto-converted into `<a>` tags
+- Reduced risk of spammy or malicious links being injected into formatted content
+- Maintained full support for existing markdown-style text formatting features
+- Improved overall content safety and formatting reliability
 
 = 1.1.6 – September 1, 2025 =
 - Updated codebase to fully comply with WordPress Coding Standards (WPCS)
