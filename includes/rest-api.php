@@ -150,23 +150,32 @@ function init_plugin_suite_chat_engine_validate_message( $message ) {
 
 /**
  * GET /messages – Return list of messages with timestamp updates
+ * Trả kèm profile_url của user (mặc định: author archive).
+ * Có thể override bằng filter: 'init_chat_engine_get_user_profile_url'.
  */
 function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) {
     global $wpdb;
-    
-    $table = esc_sql( $wpdb->prefix . 'init_chatbox_msgs' );
+
+    $table     = esc_sql( $wpdb->prefix . 'init_chatbox_msgs' );
     $after_id  = (int) $request->get_param( 'after_id' );
     $before_id = (int) $request->get_param( 'before_id' );
     $limit     = (int) $request->get_param( 'limit' );
 
+    // Limit an toàn
+    if ( $limit <= 0 ) {
+        $limit = 10;
+    } elseif ( $limit > 100 ) {
+        $limit = 100;
+    }
+
     // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-    
-    $messages = [];
+
+    $messages         = [];
     $updated_messages = [];
-    
-    // Build query based on parameters
+
+    // Build query dựa theo tham số
     if ( $after_id > 0 ) {
-        // Get newer messages (for real-time updates) - newest messages after this ID
+        // Lấy message mới hơn (realtime updates)
         $results = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT id, user_id, display_name, message, created_at 
@@ -179,23 +188,21 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
             ARRAY_A
         );
         $messages = $results;
-        
-        // Also get timestamp updates for recent messages (last 50 messages)
-        // This ensures timestamps are refreshed even when no new messages
+
+        // Lấy 50 message mới nhất để refresh timestamp
         $recent_messages = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, user_id, display_name, message, created_at 
-                 FROM {$table} 
-                 WHERE is_deleted = 0
-                 ORDER BY id DESC 
-                 LIMIT 50"
-            ),
+            // $limit cố định 50 để không phụ thuộc client
+            "SELECT id, user_id, display_name, message, created_at 
+             FROM {$table} 
+             WHERE is_deleted = 0
+             ORDER BY id DESC 
+             LIMIT 50",
             ARRAY_A
         );
         $updated_messages = $recent_messages;
-        
+
     } elseif ( $before_id > 0 ) {
-        // Get older messages (for load more/pagination) - older messages before this ID
+        // Phân trang lùi (older messages)
         $results = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT id, user_id, display_name, message, created_at 
@@ -208,10 +215,9 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
             ARRAY_A
         );
         $messages = $results;
-        // Keep DESC order for older messages - JS will handle prepending correctly
-        
+
     } else {
-        // Get initial messages - get LATEST messages to show at bottom
+        // Lần đầu: lấy mới nhất (DESC), FE tự đảo
         $results = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT id, user_id, display_name, message, created_at 
@@ -224,67 +230,111 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
             ARRAY_A
         );
         $messages = $results;
-        // Return newest first, JS will reverse to show oldest->newest
     }
 
     // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-    
-    $settings = init_plugin_suite_chat_engine_get_all_settings();
-    $show_avatars = ! empty( $settings['show_avatars'] );
-    
-    // Format messages function
-    $format_message = function( &$row ) use ( $show_avatars ) {
-        // Format timestamp
-        $created_timestamp = strtotime( $row['created_at'] );
+
+    $settings      = init_plugin_suite_chat_engine_get_all_settings();
+    $show_avatars  = ! empty( $settings['show_avatars'] );
+
+    /**
+     * Trả về URL profile của user. Mặc định dùng author archive.
+     * Có thể override qua filter 'init_chat_engine_get_user_profile_url'.
+     *
+     * @param int $user_id
+     * @return string
+     */
+    $get_profile_url = function( $user_id ) {
+        if ( $user_id <= 0 ) {
+            return '';
+        }
+
+        // Mặc định: trang tác giả (public)
+        $url = get_author_posts_url( $user_id );
+
+        /**
+         * Cho phép tùy biến:
+         * - Về trang admin edit: admin_url( 'user-edit.php?user_id=' . $user_id )
+         * - Về trang profile tùy chỉnh (BuddyPress/UM/BBPress…)
+         */
+        $url = apply_filters( 'init_chat_engine_get_user_profile_url', $url, $user_id );
+
+        // Bảo vệ đầu ra
+        return esc_url_raw( $url );
+    };
+
+    // Hàm format 1 row message
+    $format_message = function( &$row ) use ( $show_avatars, $get_profile_url ) {
+        // Time
+        $created_timestamp       = strtotime( $row['created_at'] );
         $row['created_at_human'] = human_time_diff( $created_timestamp, current_time( 'timestamp' ) );
-        $row['created_at_iso'] = gmdate( 'c', $created_timestamp );
-        $row['created_timestamp'] = $created_timestamp;
-        
-        // Add avatar if enabled and user exists
+        $row['created_at_iso']   = gmdate( 'c', $created_timestamp );
+        $row['created_timestamp']= $created_timestamp;
+
+        // Avatar
         $row['avatar_url'] = '';
-        if ( $show_avatars && ! empty( $row['user_id'] ) && $row['user_id'] > 0 ) {
-            $avatar_url = get_avatar_url( $row['user_id'], [ 'size' => 64 ] );
+        $uid = ! empty( $row['user_id'] ) ? (int) $row['user_id'] : 0;
+        if ( $show_avatars && $uid > 0 ) {
+            $avatar_url = get_avatar_url( $uid, [ 'size' => 64 ] );
             if ( $avatar_url ) {
-                $row['avatar_url'] = $avatar_url;
+                $row['avatar_url'] = esc_url_raw( $avatar_url );
             }
         }
-        
-        // Add user info
-        $row['is_current_user'] = is_user_logged_in() && (int) $row['user_id'] === get_current_user_id();
-        $row['user_type'] = empty( $row['user_id'] ) ? 'guest' : 'registered';
-        
-        // Sanitize message for output
+
+        // User flags
+        $row['is_current_user'] = is_user_logged_in() && $uid > 0 && $uid === get_current_user_id();
+        $row['user_type']       = $uid > 0 ? 'registered' : 'guest';
+
+        // Profile URL (yêu cầu của bro)
+        $row['profile_url'] = $uid > 0 ? $get_profile_url( $uid ) : '';
+
+        // Sanitize message
         $row['message'] = wp_kses_post( $row['message'] );
 
-        // Allow themes to filter message content (for user tags, etc.)
+        // Cho phép theme/plugin khác filter nội dung message
         $row['message'] = apply_filters( 'init_plugin_suite_chat_engine_format_message', $row['message'], $row );
+
+        // Tên hiển thị + HTML sẵn để FE khỏi lặp code
+        $display_name = isset( $row['display_name'] ) ? wp_strip_all_tags( $row['display_name'] ) : '';
+        if ( $row['profile_url'] ) {
+            // target+rel phòng khi render ngoài site
+            $row['display_name_html'] = sprintf(
+                '<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>',
+                esc_url( $row['profile_url'] ),
+                esc_html( $display_name )
+            );
+        } else {
+            $row['display_name_html'] = esc_html( $display_name );
+        }
     };
-    
+
     // Format main messages
     foreach ( $messages as &$row ) {
         $format_message( $row );
     }
-    
-    // Format updated messages (for timestamp refresh)
+    unset( $row );
+
+    // Format updated messages (refresh timestamp)
     foreach ( $updated_messages as &$row ) {
         $format_message( $row );
     }
-    
-    // Update statistics
+    unset( $row );
+
+    // Update stats
     init_plugin_suite_chat_engine_update_stat( 'last_activity', current_time( 'mysql' ) );
-    
+
     $response = [
-        'success' => true,
-        'messages' => $messages,
-        'count' => count( $messages ),
-        'has_more' => count( $messages ) === $limit
+        'success'   => true,
+        'messages'  => $messages,
+        'count'     => count( $messages ),
+        'has_more'  => count( $messages ) === $limit,
     ];
-    
-    // Add updated_messages only for after_id requests (real-time polling)
+
+    // Chỉ trả updated_messages khi có after_id (polling realtime)
     if ( $after_id > 0 && ! empty( $updated_messages ) ) {
         $response['updated_messages'] = $updated_messages;
     }
-    
+
     return rest_ensure_response( $response );
 }
 
