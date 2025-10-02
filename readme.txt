@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.1.9
+Stable tag: 1.2.0
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -121,6 +121,11 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.0 – October 2, 2025 =
+- Introduced new filter `init_plugin_suite_chat_engine_enrich_message_row` for extending message rows with custom user metadata  
+- Enables themes/plugins to attach extra flags (roles, VIP status, moderation rights, etc.) without touching core logic  
+- Improves flexibility and forward-compatibility of the chat engine API, allowing richer integrations and UI features downstream  
 
 = 1.1.9 – October 1, 2025 =
 - Added optional support for user profile links in chat messages

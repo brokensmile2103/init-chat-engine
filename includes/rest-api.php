@@ -151,7 +151,7 @@ function init_plugin_suite_chat_engine_validate_message( $message ) {
 /**
  * GET /messages – Return list of messages with timestamp updates
  * Trả kèm profile_url của user (mặc định: author archive).
- * Có thể override bằng filter: 'init_chat_engine_get_user_profile_url'.
+ * Có thể override bằng filter: 'init_plugin_suite_chat_engine_get_user_profile_url'.
  */
 function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) {
     global $wpdb;
@@ -163,7 +163,7 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 
     // Limit an toàn
     if ( $limit <= 0 ) {
-        $limit = 10;
+        $limit = 20;
     } elseif ( $limit > 100 ) {
         $limit = 100;
     }
@@ -239,7 +239,7 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 
     /**
      * Trả về URL profile của user. Mặc định dùng author archive.
-     * Có thể override qua filter 'init_chat_engine_get_user_profile_url'.
+     * Có thể override qua filter 'init_plugin_suite_chat_engine_get_user_profile_url'.
      *
      * @param int $user_id
      * @return string
@@ -257,7 +257,7 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
          * - Về trang admin edit: admin_url( 'user-edit.php?user_id=' . $user_id )
          * - Về trang profile tùy chỉnh (BuddyPress/UM/BBPress…)
          */
-        $url = apply_filters( 'init_chat_engine_get_user_profile_url', $url, $user_id );
+        $url = apply_filters( 'init_plugin_suite_chat_engine_get_user_profile_url', $url, $user_id );
 
         // Bảo vệ đầu ra
         return esc_url_raw( $url );
@@ -306,6 +306,8 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
         } else {
             $row['display_name_html'] = esc_html( $display_name );
         }
+
+        $row = apply_filters( 'init_plugin_suite_chat_engine_enrich_message_row', $row, $uid );
     };
 
     // Format main messages
