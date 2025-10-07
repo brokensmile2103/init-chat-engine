@@ -300,11 +300,25 @@ function init_plugin_suite_chat_engine_check_message_content( $message ) {
     }
 
     $settings = init_plugin_suite_chat_engine_get_all_settings();
-    
+
+    // Nếu không bật lọc từ hoặc không có danh sách từ cấm → bỏ qua
     if ( empty( $settings['enable_word_filter'] ) || empty( $settings['blocked_words'] ) ) {
-        return true; // No filtering enabled
+        return true;
     }
-    
+
+    // Kiểm tra quyền miễn lọc từ
+    if ( is_user_logged_in() && ! empty( $settings['word_filter_exempt_roles'] ) ) {
+        $user = wp_get_current_user();
+        $user_roles = (array) $user->roles;
+        $exempt_roles = (array) $settings['word_filter_exempt_roles'];
+
+        // Nếu user có bất kỳ role nào trong danh sách miễn → bỏ qua kiểm tra
+        if ( array_intersect( $user_roles, $exempt_roles ) ) {
+            return true;
+        }
+    }
+
+    // Kiểm tra từ cấm
     $blocked_words = array_filter( array_map( 'trim', explode( "\n", $settings['blocked_words'] ) ) );
     
     if ( empty( $blocked_words ) ) {

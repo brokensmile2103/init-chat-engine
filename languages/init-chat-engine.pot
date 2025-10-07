@@ -564,3 +564,12 @@ msgstr ""
 
 msgid "in last %d days"
 msgstr ""
+
+msgid "Word Filter Exceptions"
+msgstr ""
+
+msgid "Roles allowed to bypass word filter"
+msgstr ""
+
+msgid "Selected roles can send messages containing blocked words (bypass the word filter)."
+msgstr ""

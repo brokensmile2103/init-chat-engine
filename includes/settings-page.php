@@ -135,6 +135,24 @@ function init_plugin_suite_chat_engine_sanitize_security_settings( $input ) {
     }
     $sanitized['cleanup_days'] = $cleanup_days;
 
+        // Exempt roles from word filtering
+    $exempt_roles_input = isset( $input['word_filter_exempt_roles'] ) ? (array) $input['word_filter_exempt_roles'] : array();
+    $exempt_roles_input = array_map( 'sanitize_key', $exempt_roles_input );
+
+    // Only keep valid, existing roles
+    if ( function_exists( 'wp_roles' ) ) {
+        $all_roles = wp_roles()->roles;
+        $valid_role_slugs = array_keys( $all_roles );
+        $exempt_roles_input = array_values( array_intersect( $exempt_roles_input, $valid_role_slugs ) );
+    }
+
+    // Default to administrator if nothing selected
+    if ( empty( $exempt_roles_input ) ) {
+        $exempt_roles_input = array( 'administrator' );
+    }
+
+    $sanitized['word_filter_exempt_roles'] = $exempt_roles_input;
+
     if ( ! empty( $errors ) ) {
         add_settings_error( 'init_chat_security_settings', 'validation_errors', implode( '<br>', $errors ), 'error' );
     }
@@ -385,6 +403,43 @@ function init_plugin_suite_chat_engine_render_security_settings( $settings ) {
                               name="init_chat_security_settings[blocked_words]" 
                               rows="5" cols="50" class="large-text"><?php echo esc_textarea( $blocked_words ); ?></textarea>
                     <p class="description"><?php esc_html_e( 'Enter blocked words/phrases, one per line. Case-insensitive matching.', 'init-chat-engine' ); ?></p>
+                </fieldset>
+            </td>
+        </tr>
+
+        <?php
+        // Default: administrator is checked if not saved yet
+        $exempt_roles = isset( $settings['word_filter_exempt_roles'] )
+            ? (array) $settings['word_filter_exempt_roles']
+            : array( 'administrator' );
+
+        if ( function_exists( 'wp_roles' ) ) {
+            $all_roles = wp_roles()->roles;
+        } else {
+            $all_roles = array();
+        }
+        ?>
+        <tr>
+            <th scope="row"><?php esc_html_e( 'Word Filter Exceptions', 'init-chat-engine' ); ?></th>
+            <td>
+                <fieldset>
+                    <legend class="screen-reader-text">
+                        <span><?php esc_html_e( 'Roles allowed to bypass word filter', 'init-chat-engine' ); ?></span>
+                    </legend>
+
+                    <?php foreach ( $all_roles as $role_slug => $role_obj ) : ?>
+                        <label style="display:inline-block;margin-right:10px !important;">
+                            <input type="checkbox"
+                                   name="init_chat_security_settings[word_filter_exempt_roles][]"
+                                   value="<?php echo esc_attr( $role_slug ); ?>"
+                                   <?php checked( in_array( $role_slug, $exempt_roles, true ), true ); ?>>
+                            <?php echo esc_html( translate_user_role( $role_obj['name'] ) ); ?>
+                        </label>
+                    <?php endforeach; ?>
+
+                    <p class="description">
+                        <?php esc_html_e( 'Selected roles can send messages containing blocked words (bypass the word filter).', 'init-chat-engine' ); ?>
+                    </p>
                 </fieldset>
             </td>
         </tr>

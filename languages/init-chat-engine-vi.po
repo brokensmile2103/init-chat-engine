@@ -564,3 +564,12 @@ msgstr "Hôm qua:"
 
 msgid "in last %d days"
 msgstr "trong %d ngày qua"
+
+msgid "Word Filter Exceptions"
+msgstr "Ngoại lệ lọc từ"
+
+msgid "Roles allowed to bypass word filter"
+msgstr "Các quyền được phép bỏ qua bộ lọc từ"
+
+msgid "Selected roles can send messages containing blocked words (bypass the word filter)."
+msgstr "Các quyền được chọn có thể gửi tin nhắn chứa từ bị cấm (bỏ qua bộ lọc từ)."

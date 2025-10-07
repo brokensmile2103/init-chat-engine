@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -121,6 +121,15 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.1 – October 7, 2025 =
+- Added role-based word filter exceptions in Security settings  
+- New UI option: **“Word Filter Exceptions”** allows selecting user roles that can bypass blocked-word restrictions  
+- Default exempt role: **Administrator** (others can be toggled via checkboxes)  
+- Enhanced backend sanitization with strict role validation against existing WordPress roles  
+- Updated message validation logic: users in exempt roles can send blocked words without triggering filter  
+- Preserves security for guests and non-exempt roles (still subject to normal word filtering)  
+- Improved localization: added Vietnamese translations for all new settings strings  
 
 = 1.2.0 – October 2, 2025 =
 - Introduced new filter `init_plugin_suite_chat_engine_enrich_message_row` for extending message rows with custom user metadata  
