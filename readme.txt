@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -121,6 +121,13 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.2 – October 7, 2025 =
+- **Hotfix Release:** removed redundant ban check inside `[init_chatbox]` shortcode  
+- Eliminated secondary `init_plugin_suite_chat_engine_check_user_banned()` call (already handled by shortcode controller)  
+- Prevented duplicate banned-message rendering and minor timezone mismatches  
+- Simplified shortcode logic for better maintainability and consistency with ban middleware  
+- No user-facing behavior change — internal backend cleanup only  
 
 = 1.2.1 – October 7, 2025 =
 - Added role-based word filter exceptions in Security settings  

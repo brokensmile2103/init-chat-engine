@@ -19,15 +19,6 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = [], $content = 
         'id'           => '',
     ], $atts, 'init_chatbox' );
 
-    // Check if user is banned
-    $user_ip = init_plugin_suite_chat_engine_get_user_ip();
-    $user_id = is_user_logged_in() ? get_current_user_id() : null;
-    $ban_check = init_plugin_suite_chat_engine_check_user_banned( $user_id, $user_ip );
-    
-    if ( $ban_check ) {
-        return init_plugin_suite_chat_engine_render_banned_message( $ban_check );
-    }
-
     ob_start();
     
     // Enqueue assets
