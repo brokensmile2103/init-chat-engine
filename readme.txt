@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -121,6 +121,17 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.3 – October 14, 2025 =
+- Added safe integration hook for cross-plugin Init FX Engine keyword replacement  
+- Chat engine now auto-invokes external DOM keyword highlighter (`replaceFXKeywordsInDOM`) **only when new messages are loaded**  
+- Added conditional wrapper with `typeof` check to prevent errors if the external plugin is not active  
+- Introduced new internal helper: `safeRunFX()` for async idle execution (avoids blocking UI on message bursts)  
+- Implemented new scoped function `initChatboxReplaceFXKeywords()` — optimized DOM scanning limited to `.init-chatbox-text` only  
+- Rewrote FX keyword parser with `TreeWalker` for deep text traversal and regex stability  
+- Eliminated duplicate link generation and ensured idempotent behavior (no double replacements)  
+- Performance improved significantly when many messages are rendered or refreshed in batch  
+- Internal enhancement only — no UI changes; improves plugin compatibility and runtime stability
 
 = 1.2.2 – October 7, 2025 =
 - **Hotfix Release:** removed redundant ban check inside `[init_chatbox]` shortcode  

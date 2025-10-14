@@ -253,6 +253,96 @@ document.addEventListener('DOMContentLoaded', function () {
         updatePollingInterval();
     }
 
+    function initChatboxReplaceFXKeywords(root = document.body) {
+        if (typeof FX_KEYWORDS !== 'object') return;
+
+        const rules = [];
+        Object.entries(FX_KEYWORDS).forEach(([effect, entries]) => {
+            entries.forEach(({ keyword, emoji }) => {
+                if (!keyword) return;
+                const re = new RegExp(`\\b(${escapeRegExp(keyword)})\\b`, 'gi');
+                rules.push({ effect, emoji: emoji || null, keyword, re });
+            });
+        });
+        if (!rules.length) return;
+
+        const containers = root.querySelectorAll('.init-chatbox-text');
+        if (!containers.length) return;
+
+        containers.forEach(container => {
+            const walker = document.createTreeWalker(
+                container,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode(node) {
+                        const p = node.parentElement;
+                        if (!p) return NodeFilter.FILTER_REJECT;
+                        if (p.closest('script,style,a.fx-keyword')) return NodeFilter.FILTER_REJECT;
+                        if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+
+            const textNodes = [];
+            while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+            textNodes.forEach(textNode => {
+                let text = textNode.nodeValue;
+                let changed = false;
+
+                rules.forEach(({ effect, emoji, keyword, re }) => {
+                    re.lastIndex = 0;
+                    if (!re.test(text)) return;
+                    re.lastIndex = 0;
+
+                    const frag = document.createDocumentFragment();
+                    const parts = text.split(re);
+
+                    for (let i = 0; i < parts.length; i++) {
+                        const part = parts[i];
+                        if (i % 2 === 1 && part) {
+                            const a = document.createElement('a');
+                            a.href = '#';
+                            a.className = 'fx-keyword';
+                            a.dataset.effect = effect;
+                            if (emoji) a.dataset.emoji = emoji;
+                            a.textContent = part;
+                            a.addEventListener('click', e => {
+                                e.preventDefault();
+                                try { runEffect(effect, emoji); } catch {}
+                            });
+                            frag.appendChild(a);
+                        } else if (part) {
+                            frag.appendChild(document.createTextNode(part));
+                        }
+                    }
+
+                    textNode.parentNode.replaceChild(frag, textNode);
+                    changed = true;
+                });
+
+                if (changed) textNode.nodeValue = text;
+            });
+        });
+    }
+
+    function safeReplaceFXKeywordsInDOM() {
+        try {
+            if (typeof initChatboxReplaceFXKeywords === 'function') {
+                requestAnimationFrame(() => initChatboxReplaceFXKeywords(messagesListEl));
+            }
+        } catch (err) {
+            console.debug('replaceFXKeywordsInDOM error:', err);
+        }
+    }
+
+    function runFXIfHasMessages(list) {
+        if (Array.isArray(list) && list.length > 0) {
+            safeReplaceFXKeywordsInDOM();
+        }
+    }
+
     // ===== AVATAR FUNCTIONS =====
 
     function getFallbackAvatar(displayName) {
@@ -820,6 +910,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (wasAtBottom || !state.userScrolledUp) {
                         scrollToBottom(true);
                     }
+
+                    runFXIfHasMessages(data.messages);
                     
                     // Show notification if window is not focused
                     if (!polling.isWindowFocused) {
@@ -897,6 +989,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (data.success && data.messages && data.messages.length > 0) {
                     const messagesInOrder = [...data.messages].reverse();
                     messagesInOrder.forEach(prependMessage);
+
+                    runFXIfHasMessages(data.messages);
                     
                     // Maintain scroll position after prepending
                     requestAnimationFrame(() => {
@@ -1378,6 +1472,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         state.messageCache.set(msg.id, msg);
                         appendMessage(msg, false);
                     });
+
+                    runFXIfHasMessages(data.messages);
                     
                     // Ensure proper scroll to bottom
                     const scrollToBottomInit = () => {
