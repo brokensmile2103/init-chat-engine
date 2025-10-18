@@ -281,53 +281,79 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = [] ) {
 
 /**
  * Check if word filtering is enabled and message contains blocked words
+ * Return true  = cho phép
+ * Return false = chặn (rỗng / có từ cấm)
  */
 function init_plugin_suite_chat_engine_check_message_content( $message ) {
-    // Strip tags và trim tất cả khoảng trắng, unicode space
-    $clean_message = trim( wp_strip_all_tags( preg_replace( '/[\p{C}\p{Z}]+/u', '', $message ) ) );
-    
-    if ( $clean_message === '' ) {
-        return false; // Message rỗng hoặc toàn kí tự trắng/invisible
+    // --- B1) Chỉ xác định "rỗng" theo whitespace, KHÔNG strip <...> để tránh case "<3>" thành rỗng
+    if ( ! is_string( $message ) ) {
+        return false;
+    }
+    // Nếu chỉ toàn khoảng trắng (mọi loại), coi là rỗng
+    if ( preg_match( '/^\s*$/u', $message ) ) {
+        return false;
     }
 
     $settings = init_plugin_suite_chat_engine_get_all_settings();
 
-    // Nếu không bật lọc từ hoặc không có danh sách từ cấm → bỏ qua
-    if ( empty( $settings['enable_word_filter'] ) || empty( $settings['blocked_words'] ) ) {
-        return true;
-    }
+    // Chuẩn hoá cờ bật/tắt filter
+    $filter_enabled = ! empty( $settings['enable_word_filter'] ) && (int) $settings['enable_word_filter'] === 1;
 
-    // Kiểm tra quyền miễn lọc từ
-    if ( is_user_logged_in() && ! empty( $settings['word_filter_exempt_roles'] ) ) {
-        $user = wp_get_current_user();
-        $user_roles = (array) $user->roles;
+    // --- B2) Nếu user thuộc role được miễn → cho qua sớm (tiết kiệm công)
+    if ( $filter_enabled && is_user_logged_in() && ! empty( $settings['word_filter_exempt_roles'] ) ) {
+        $user         = wp_get_current_user();
+        $user_roles   = (array) $user->roles;
         $exempt_roles = (array) $settings['word_filter_exempt_roles'];
-
-        // Nếu user có bất kỳ role nào trong danh sách miễn → bỏ qua kiểm tra
         if ( array_intersect( $user_roles, $exempt_roles ) ) {
             return true;
         }
     }
 
-    // Kiểm tra từ cấm
-    $blocked_words = array_filter( array_map( 'trim', explode( "\n", $settings['blocked_words'] ) ) );
-    
+    // Nếu tắt filter → cho phép
+    if ( ! $filter_enabled ) {
+        return true;
+    }
+
+    // --- B3) Chuẩn hoá danh sách từ cấm
+    $raw_list = isset( $settings['blocked_words'] ) ? (string) $settings['blocked_words'] : '';
+    // Tách theo mọi kiểu xuống dòng, trim, loại bỏ dòng rỗng sau trim
+    $blocked_words = preg_split( '/\R/u', $raw_list );
+    $blocked_words = array_values( array_filter( array_map( 'trim', (array) $blocked_words ), 'strlen' ) );
+
+    // Không có từ hợp lệ → cho phép
     if ( empty( $blocked_words ) ) {
         return true;
     }
-    
-    $message_lower = strtolower( $message );
-    
-    foreach ( $blocked_words as $word ) {
-        if ( empty( $word ) ) continue;
-        
-        $word_lower = strtolower( trim( $word ) );
-        if ( strpos( $message_lower, $word_lower ) !== false ) {
-            return false; // Blocked word found
+
+    // So khớp không phân biệt hoa/thường, hỗ trợ UTF-8
+    if ( function_exists( 'mb_strtolower' ) ) {
+        $msg = mb_strtolower( $message, 'UTF-8' );
+    } else {
+        // fallback
+        $msg = strtolower( $message );
+    }
+
+    foreach ( $blocked_words as $w ) {
+        if ( $w === '' ) {
+            continue;
+        }
+        // Escape để tránh phá regex khi từ cấm có ký tự đặc biệt
+        $needle = function_exists( 'mb_strtolower' ) ? mb_strtolower( $w, 'UTF-8' ) : strtolower( $w );
+
+        // Dùng mb_stripos nếu có, an toàn cho UTF-8
+        if ( function_exists( 'mb_stripos' ) ) {
+            if ( mb_stripos( $msg, $needle, 0, 'UTF-8' ) !== false ) {
+                return false; // phát hiện từ cấm
+            }
+        } else {
+            // fallback ASCII
+            if ( stripos( $msg, $needle ) !== false ) {
+                return false;
+            }
         }
     }
-    
-    return true; // Message is clean
+
+    return true; // sạch
 }
 
 /**

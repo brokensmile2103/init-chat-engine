@@ -573,3 +573,18 @@ msgstr ""
 
 msgid "Selected roles can send messages containing blocked words (bypass the word filter)."
 msgstr ""
+
+msgid "Delete All Messages"
+msgstr ""
+
+msgid "Are you sure you want to delete ALL chat messages? This action cannot be undone."
+msgstr ""
+
+msgid "All chat messages have been permanently deleted."
+msgstr ""
+
+msgid "Failed to delete chat messages. Please try again."
+msgstr ""
+
+msgid "All chat messages deleted successfully."
+msgstr ""

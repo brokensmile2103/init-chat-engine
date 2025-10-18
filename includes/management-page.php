@@ -207,6 +207,16 @@ function init_plugin_suite_chat_engine_render_management_page() {
         init_plugin_suite_chat_engine_cleanup_messages();
         echo '<div class="notice notice-success"><p>' . esc_html__( 'Cleanup completed successfully.', 'init-chat-engine' ) . '</p></div>';
     }
+
+    // Handle nuclear delete (delete all messages)
+    if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_all_messages' && $nonce && wp_verify_nonce( $nonce, 'init_chat_delete_all' ) ) {
+        $result = init_plugin_suite_chat_engine_delete_all_messages();
+        if ( is_wp_error( $result ) ) {
+            echo '<div class="notice notice-error"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+        } else {
+            echo '<div class="notice notice-success"><p>' . esc_html__( 'All chat messages have been permanently deleted.', 'init-chat-engine' ) . '</p></div>';
+        }
+    }
     
     $active_subtab = isset( $_GET['subtab'] ) ? sanitize_text_field( wp_unslash( $_GET['subtab'] ) ) : 'messages';
     ?>
@@ -825,6 +835,13 @@ function init_plugin_suite_chat_engine_render_stats_management() {
             
             <a href="?page=init-chat-management&subtab=banned" class="button">
                 <?php esc_html_e( 'Manage Bans', 'init-chat-engine' ); ?>
+            </a>
+
+            <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=init-chat-management&action=delete_all_messages' ), 'init_chat_delete_all' ) ); ?>" 
+               class="button button-danger" 
+               style="background: #d63638; color: #fff; border-color: #b32d2e;"
+               onclick="return confirm('<?php echo esc_js( __( 'This will permanently delete ALL chat messages. Continue?', 'init-chat-engine' ) ); ?>');">
+                <?php esc_html_e( 'Delete All Messages', 'init-chat-engine' ); ?>
             </a>
         </p>
         

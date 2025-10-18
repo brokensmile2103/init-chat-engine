@@ -573,3 +573,18 @@ msgstr "Các quyền được phép bỏ qua bộ lọc từ"
 
 msgid "Selected roles can send messages containing blocked words (bypass the word filter)."
 msgstr "Các quyền được chọn có thể gửi tin nhắn chứa từ bị cấm (bỏ qua bộ lọc từ)."
+
+msgid "Delete All Messages"
+msgstr "Xóa sạch toàn bộ tin nhắn"
+
+msgid "Are you sure you want to delete ALL chat messages? This action cannot be undone."
+msgstr "Bạn có chắc chắn muốn xóa TOÀN BỘ tin nhắn trong chat không? Hành động này không thể hoàn tác."
+
+msgid "All chat messages have been permanently deleted."
+msgstr "Toàn bộ tin nhắn trong chat đã được xóa vĩnh viễn."
+
+msgid "Failed to delete chat messages. Please try again."
+msgstr "Không thể xóa tin nhắn. Vui lòng thử lại."
+
+msgid "All chat messages deleted successfully."
+msgstr "Đã xóa thành công toàn bộ tin nhắn chat."

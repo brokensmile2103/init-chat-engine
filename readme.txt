@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5  
 Tested up to: 6.8  
 Requires PHP: 7.4  
-Stable tag: 1.2.4
+Stable tag: 1.2.5
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -121,6 +121,16 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.5 – October 18, 2025 =  
+- Added new **“Delete All Messages”** button under **Quick Actions** in the management panel  
+- Feature permanently removes all chat messages from the database with a single click  
+- Protected by full security stack: admin-only capability, nonce verification, and SQL transaction safety  
+- Resets all chat statistics (`total_messages`, `messages_today`, `active_users_today`, etc.) post-deletion  
+- Includes detailed WP_DEBUG logging for admin audit trail (`who`, `when`)  
+- UX-consistent with existing “Run Cleanup Now” button — executes instantly without JS dependency  
+- Designed as a “nuclear cleanup” option for administrators managing public chat environments  
+- No other functional or visual changes; this update focuses solely on administrative maintenance tools  
 
 = 1.2.4 – October 18, 2025 =  
 - Rebuilt **FX Keyword Engine** for per-message precision and zero-DOM overhead  

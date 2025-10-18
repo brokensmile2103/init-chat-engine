@@ -513,3 +513,79 @@ add_action( 'init', function() {
         update_option( 'init_chat_last_daily_stat_update', $today );
     }
 });
+
+/**
+ * Delete all chat messages (nuclear cleanup)
+ * - Only accessible by administrators
+ * - Resets message statistics
+ * - Keeps database integrity (TRUNCATE for performance)
+ */
+function init_plugin_suite_chat_engine_delete_all_messages() {
+    // Chỉ admin mới được phép
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return new WP_Error(
+            'unauthorized',
+            __( 'You do not have permission to perform this action.', 'init-chat-engine' ),
+            [ 'status' => 403 ]
+        );
+    }
+
+    global $wpdb;
+    $table_name  = $wpdb->prefix . 'init_chatbox_msgs';
+    $stats_table = $wpdb->prefix . 'init_chatbox_stats';
+
+    // Bắt đầu transaction (nếu DB hỗ trợ)
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    $wpdb->query( 'START TRANSACTION' );
+
+    try {
+        // Truncate bảng message — nhanh, sạch, reset AUTO_INCREMENT
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        $wpdb->query( "TRUNCATE TABLE {$table_name}" );
+
+        // Reset các thống kê liên quan
+        $default_stats = [
+            'total_messages'     => 0,
+            'messages_today'     => 0,
+            'active_users_today' => 0,
+            'last_cleanup'       => current_time( 'mysql' ),
+        ];
+
+        foreach ( $default_stats as $key => $value ) {
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+            $wpdb->replace(
+                $stats_table,
+                [
+                    'stat_key'   => $key,
+                    'stat_value' => $value,
+                    'updated_at' => current_time( 'mysql' ),
+                ],
+                [ '%s', '%s', '%s' ]
+            );
+        }
+
+        // Commit transaction
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->query( 'COMMIT' );
+
+        // Ghi log (nếu WP_DEBUG bật)
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log(
+                sprintf(
+                    'Init Chat Engine: All chat messages deleted by admin #%d at %s',
+                    get_current_user_id(),
+                    current_time( 'mysql' )
+                )
+            );
+        }
+
+        return true;
+
+    } catch ( Exception $e ) {
+        // Rollback nếu lỗi
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->query( 'ROLLBACK' );
+        return new WP_Error( 'db_error', 'Failed to delete messages: ' . $e->getMessage() );
+    }
+}
