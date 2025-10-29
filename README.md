@@ -4,7 +4,7 @@
 
 **Not just a chatbox. A true Chat Engine for WordPress.**
 
-[![Version](https://img.shields.io/badge/stable-v1.2.4-blue.svg)](https://wordpress.org/plugins/init-chat-engine/)
+[![Version](https://img.shields.io/badge/stable-v1.2.6-blue.svg)](https://wordpress.org/plugins/init-chat-engine/)
 [![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 ![Made with ❤️ in HCMC](https://img.shields.io/badge/Made%20with-%E2%9D%A4%EF%B8%8F%20in%20HCMC-blue)
 
@@ -52,6 +52,14 @@ or any WordPress site that needs real-time conversation.
   - Translation-ready with `.pot` file included
   - Vietnamese translation bundled
   - Fully compatible with WordPress i18n
+
+ ## Filters
+
+- `init_plugin_suite_chat_engine_word_filter_strategy` – Modify the word filtering strategy (`substring`, `word`, `regex`)
+- `init_plugin_suite_chat_engine_blocked_words` – Modify the blocked-words list before validation
+- `init_plugin_suite_chat_engine_bypass_filter` – Bypass filtering under custom conditions (VIP, internal users, etc.)
+- `init_plugin_suite_chat_engine_word_block_hit` – Triggered when a blocked word prevents a message from sending *(action)*
+- `init_plugin_suite_chat_engine_enrich_message_row` – Extend chat message data before JSON output (metadata, roles, flags)
 
 ## Installation
 
