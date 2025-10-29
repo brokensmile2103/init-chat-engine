@@ -280,80 +280,103 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = [] ) {
 }
 
 /**
- * Check if word filtering is enabled and message contains blocked words
- * Return true  = cho phép
- * Return false = chặn (rỗng / có từ cấm)
+ * Return true = cho phép; false = chặn
+ * TÔN TRỌNG CÀI ĐẶT HIỆN CÓ:
+ * - enable_word_filter (1/0)
+ * - blocked_words (textarea, 1 từ/line)
+ * - word_filter_exempt_roles (slug)
+ *
+ * CHỈ BỔ SUNG QUA FILTER (tuỳ chọn):
+ * - init_plugin_suite_chat_engine_bypass_filter( bool $bypass, string $message, WP_User $user|null, array $settings )
+ * - init_plugin_suite_chat_engine_blocked_words( array $words, array $settings, string $message ) : array
+ * - init_plugin_suite_chat_engine_word_filter_strategy( string $strategy, array $settings, string $message ) : 'word'|'substring'|'regex'
+ * - init_plugin_suite_chat_engine_word_block_hit( string $hit, string $raw_message, string $strategy ) : action
  */
 function init_plugin_suite_chat_engine_check_message_content( $message ) {
-    // --- B1) Chỉ xác định "rỗng" theo whitespace, KHÔNG strip <...> để tránh case "<3>" thành rỗng
-    if ( ! is_string( $message ) ) {
-        return false;
-    }
-    // Nếu chỉ toàn khoảng trắng (mọi loại), coi là rỗng
-    if ( preg_match( '/^\s*$/u', $message ) ) {
-        return false;
-    }
+    if ( ! is_string( $message ) ) return false;
+    if ( preg_match( '/^\s*$/u', $message ) ) return false;
 
     $settings = init_plugin_suite_chat_engine_get_all_settings();
 
-    // Chuẩn hoá cờ bật/tắt filter
-    $filter_enabled = ! empty( $settings['enable_word_filter'] ) && (int) $settings['enable_word_filter'] === 1;
+    // === 1) BYPASS (cài đặt role exempt + admin)
+    $bypass = false;
+    $user   = null;
 
-    // --- B2) Nếu user thuộc role được miễn → cho qua sớm (tiết kiệm công)
-    if ( $filter_enabled && is_user_logged_in() && ! empty( $settings['word_filter_exempt_roles'] ) ) {
-        $user         = wp_get_current_user();
-        $user_roles   = (array) $user->roles;
-        $exempt_roles = (array) $settings['word_filter_exempt_roles'];
-        if ( array_intersect( $user_roles, $exempt_roles ) ) {
-            return true;
+    if ( is_user_logged_in() ) {
+        $user = wp_get_current_user();
+
+        if ( user_can( $user, 'manage_options' ) ) {
+            $bypass = true;
+        } else {
+            $user_roles   = array_map( 'strtolower', (array) $user->roles );
+            $exempt_roles = array_map( 'strtolower', (array) ( $settings['word_filter_exempt_roles'] ?? [] ) );
+            if ( array_intersect( $user_roles, $exempt_roles ) ) {
+                $bypass = true;
+            }
         }
     }
 
-    // Nếu tắt filter → cho phép
-    if ( ! $filter_enabled ) {
-        return true;
-    }
+    // Cho phép bypass thêm bằng code
+    $bypass = (bool) apply_filters( 'init_plugin_suite_chat_engine_bypass_filter', $bypass, $message, $user, $settings );
+    if ( $bypass ) return true;
 
-    // --- B3) Chuẩn hoá danh sách từ cấm
+    // === 2) Tôn trọng setting bật / tắt
+    if ( empty( $settings['enable_word_filter'] ) ) return true;
+
+    // === 3) Lấy danh sách từ cấm từ setting
     $raw_list = isset( $settings['blocked_words'] ) ? (string) $settings['blocked_words'] : '';
-    // Tách theo mọi kiểu xuống dòng, trim, loại bỏ dòng rỗng sau trim
-    $blocked_words = preg_split( '/\R/u', $raw_list );
-    $blocked_words = array_values( array_filter( array_map( 'trim', (array) $blocked_words ), 'strlen' ) );
+    $blocked_words = preg_split( '/\R/u', $raw_list ) ?: [];
+    $blocked_words = array_values( array_filter( array_map( 'trim', $blocked_words ), function($x){
+        return $x !== '' && strpos( ltrim($x), '#' ) !== 0;
+    } ) );
 
-    // Không có từ hợp lệ → cho phép
-    if ( empty( $blocked_words ) ) {
-        return true;
-    }
+    // Cho phép can thiệp vào list
+    $blocked_words = (array) apply_filters( 'init_plugin_suite_chat_engine_blocked_words', $blocked_words, $settings, $message );
 
-    // So khớp không phân biệt hoa/thường, hỗ trợ UTF-8
-    if ( function_exists( 'mb_strtolower' ) ) {
-        $msg = mb_strtolower( $message, 'UTF-8' );
-    } else {
-        // fallback
-        $msg = strtolower( $message );
-    }
+    if ( empty( $blocked_words ) ) return true;
+
+    // === 4) Chuẩn hoá Unicode + lower (chỉ dùng cho substring/word)
+    $normalize = static function( $str ) {
+        if ( class_exists('\Normalizer') ) $str = \Normalizer::normalize( $str, \Normalizer::FORM_C );
+        return function_exists('mb_strtolower') ? mb_strtolower( $str, 'UTF-8' ) : strtolower( $str );
+    };
+    $msg_norm = $normalize( $message );
+
+    // === 5) Chiến lược mặc định: substring (hung hãn)
+    $strategy = apply_filters( 'init_plugin_suite_chat_engine_word_filter_strategy', 'substring', $settings, $message );
 
     foreach ( $blocked_words as $w ) {
-        if ( $w === '' ) {
-            continue;
-        }
-        // Escape để tránh phá regex khi từ cấm có ký tự đặc biệt
-        $needle = function_exists( 'mb_strtolower' ) ? mb_strtolower( $w, 'UTF-8' ) : strtolower( $w );
+        if ( $w === '' ) continue;
 
-        // Dùng mb_stripos nếu có, an toàn cho UTF-8
-        if ( function_exists( 'mb_stripos' ) ) {
-            if ( mb_stripos( $msg, $needle, 0, 'UTF-8' ) !== false ) {
-                return false; // phát hiện từ cấm
+        if ( $strategy === 'regex' ) {
+            // DÙNG PATTERN THÔ - KHÔNG normalize/lowercase
+            $pattern = $w;
+            if ( @preg_match( $pattern, '' ) === false ) continue;
+            if ( preg_match( $pattern, $message ) ) { // so trên raw message để giữ nguyên ngữ cảnh regex
+                do_action( 'init_plugin_suite_chat_engine_word_block_hit', $w, $message, 'regex' );
+                return false;
             }
-        } else {
-            // fallback ASCII
-            if ( stripos( $msg, $needle ) !== false ) {
+        }
+        elseif ( $strategy === 'word' ) {
+            $needle = $normalize( $w );
+            if ( $needle === '' ) continue;
+            $pattern = '/(?<!\pL)' . preg_quote( $needle, '/' ) . '(?!\pL)/u';
+            if ( preg_match( $pattern, $msg_norm ) ) {
+                do_action( 'init_plugin_suite_chat_engine_word_block_hit', $w, $message, 'word' );
+                return false;
+            }
+        }
+        else { // === default SUBSTRING ===
+            $needle = $normalize( $w );
+            if ( $needle === '' ) continue;
+            if ( function_exists('mb_stripos') ? mb_stripos( $msg_norm, $needle, 0, 'UTF-8' ) !== false : stripos( $msg_norm, $needle ) !== false ) {
+                do_action( 'init_plugin_suite_chat_engine_word_block_hit', $w, $message, 'substring' );
                 return false;
             }
         }
     }
 
-    return true; // sạch
+    return true;
 }
 
 /**

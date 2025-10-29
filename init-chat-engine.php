@@ -3,13 +3,13 @@
  * Plugin Name: Init Chat Engine
  * Plugin URI: https://inithtml.com/plugin/init-chat-engine/
  * Description: A lightweight, community-focused chat system built with REST API and Vanilla JS. Embed anywhere using the [init_chatbox] shortcode.
- * Version: 1.2.5
+ * Version: 1.2.6
  * Author: Init HTML
  * Author URI: https://inithtml.com/
  * Text Domain: init-chat-engine
  * Domain Path: /languages
  * Requires at least: 5.5
- * Tested up to: 6.8
+ * Tested up to: 6.9
  * Requires PHP: 7.4
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_VERSION',        '1.2.5' );
+define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_VERSION',        '1.2.6' );
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_SLUG',           'init-chat-engine' );
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION',         'init_plugin_suite_chat_engine_settings' );
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_NAMESPACE',      'initchat/v1' );

@@ -1,12 +1,12 @@
 === Init Chat Engine – Real-Time, Community, Extensible ===
-Contributors: brokensmile.2103  
+Contributors: brokensmile.2103
 Tags: chat, community, realtime, shortcode, lightweight
-Requires at least: 5.5  
-Tested up to: 6.8  
-Requires PHP: 7.4  
-Stable tag: 1.2.5
-License: GPLv2 or later  
-License URI: https://www.gnu.org/licenses/gpl-2.0.html  
+Requires at least: 5.5
+Tested up to: 6.9
+Requires PHP: 7.4
+Stable tag: 1.2.6
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 A lightweight, real-time community chat system built with REST API and Vanilla JS. No jQuery, no reload. Full admin panel with moderation tools.
 
@@ -80,6 +80,35 @@ Shortcode `[init_chatbox]` supports the following attributes:
 
 Example: `[init_chatbox height="500px" title="Community Chat" theme="modern"]`
 
+== Filters for Developers ==
+
+This plugin provides filters and actions to allow developers to extend word filtering, message processing, and chat behavior without modifying core files.
+
+**`init_plugin_suite_chat_engine_word_filter_strategy`**  
+Modify word filtering strategy (`substring`, `word`, `regex`).  
+**Applies to:** Message validation  
+**Params:** `string $strategy`, `array $settings`, `string $message`
+
+**`init_plugin_suite_chat_engine_blocked_words`**  
+Modify the blocked-words list before validation.  
+**Applies to:** Message validation  
+**Params:** `array $blocked_words`, `array $settings`, `string $message`
+
+**`init_plugin_suite_chat_engine_bypass_filter`**  
+Bypass filtering under custom conditions (VIP, internal users, etc.).  
+**Applies to:** Message validation  
+**Params:** `bool $bypass`, `string $message`, `WP_User|null $user`, `array $settings`
+
+**`init_plugin_suite_chat_engine_word_block_hit`** *(action)*  
+Triggered when a word filter rule blocks a message.  
+**Applies to:** Message validation  
+**Params:** `string $blocked_word`, `string $message`, `string $strategy`
+
+**`init_plugin_suite_chat_engine_enrich_message_row`**  
+Extend chat message data (add flags, metadata, user info, etc.).  
+**Applies to:** Backend DB → JSON output  
+**Params:** `array $message_row`, `WP_User|null $user`
+
 == Screenshots ==
 
 1. Admin settings panel - Basic configuration
@@ -121,6 +150,22 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.6 – October 20, 2025 =
+- Overhauled **Word Filter Engine** with hardened validation lifecycle
+- Default strategy is now **aggressive substring detection** (catches `https://`, domains, encoded text, spam links, etc.)
+- Fully respects existing Security settings:
+  - `Enable Word Filtering` toggle
+  - `Blocked Words` textarea (one per line, supports Unicode)
+  - `Word Filter Exceptions` (role-based whitelist: Administrators always bypass)
+- Introduced new developer extension hooks (no new UI options):
+  - `init_plugin_suite_chat_engine_word_filter_strategy` — switch filter logic (`substring`, `word`, `regex`)
+  - `init_plugin_suite_chat_engine_blocked_words` — modify blocked word list programmatically
+  - `init_plugin_suite_chat_engine_bypass_filter` — bypass filtering based on custom logic (VIP, IP ranges, etc.)
+  - `init_plugin_suite_chat_engine_word_block_hit` — event fired when a blocked word triggers
+- Improved unicode normalization and internal cleanup of blocked-word lists (removes empty lines and `#comments`)
+- Fully backwards-compatible — no disruption to existing settings or workflows
+- Strengthened message security layer; prevents all major spam patterns (URL, Discord invite, Telegram link, obfuscated characters)
 
 = 1.2.5 – October 18, 2025 =  
 - Added new **“Delete All Messages”** button under **Quick Actions** in the management panel  
