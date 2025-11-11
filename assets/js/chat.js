@@ -990,8 +990,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(response => response.json())
             .then(data => {
                 if (data.success && data.messages && data.messages.length > 0) {
-                    const messagesInOrder = [...data.messages].reverse();
-                    messagesInOrder.forEach(prependMessage);
+                    data.messages.forEach(prependMessage);
                     
                     // Maintain scroll position after prepending
                     requestAnimationFrame(() => {

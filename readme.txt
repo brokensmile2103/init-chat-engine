@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.2.7
+Stable tag: 1.2.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.8 – November 11, 2025 =
+- Hotfix: fixed **Load More (history pagination)** message order becoming inconsistent
+  - **API (`before_id`)**: changed `ORDER BY id` from **ASC → DESC**
+  - **Frontend (Load More)**: removed `.reverse()`, now directly `prepend()` using API DESC order
+  - **Frontend (Initial load)**: unchanged — reverse initial batch then `append()` (old → new)
+  - **Frontend (Realtime / after_id)**: unchanged — API returns ASC, frontend `append()`
+- Result: timeline in the DOM remains strictly **old → new**
+- Minimal change — **no DB schema changes, no UI changes**
 
 = 1.2.7 – November 10, 2025 =
 - Fixed **Load More / Pagination** logic returning messages in reversed order

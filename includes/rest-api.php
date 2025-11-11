@@ -208,7 +208,7 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
                 "SELECT id, user_id, display_name, message, created_at 
                  FROM {$table} 
                  WHERE id < %d AND is_deleted = 0
-                 ORDER BY id ASC 
+                 ORDER BY id DESC 
                  LIMIT %d",
                 $before_id, $limit
             ),
