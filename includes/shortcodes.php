@@ -155,7 +155,7 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = [] ) {
 }
 
 /**
- * Render banned message
+ * Render banned message - FIXED TIMEZONE
  */
 function init_plugin_suite_chat_engine_render_banned_message( $ban_info ) {
     ob_start();
@@ -172,9 +172,15 @@ function init_plugin_suite_chat_engine_render_banned_message( $ban_info ) {
                 <?php endif; ?>
                 
                 <?php if ( ! empty( $ban_info->expires_at ) ) : ?>
+                    <?php
+                    // FIX: Vì expires_at đã lưu theo WordPress timezone rồi
+                    // Nên chỉ cần format lại, KHÔNG convert timezone nữa
+                    $expires_timestamp = strtotime( $ban_info->expires_at );
+                    $date_format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+                    ?>
                     <p>
                         <strong><?php esc_html_e( 'Ban expires:', 'init-chat-engine' ); ?></strong> 
-                        <?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $ban_info->expires_at ) ) ); ?>
+                        <?php echo esc_html( date_i18n( $date_format, $expires_timestamp ) ); ?>
                     </p>
                 <?php else : ?>
                     <p><em><?php esc_html_e( 'This ban is permanent.', 'init-chat-engine' ); ?></em></p>

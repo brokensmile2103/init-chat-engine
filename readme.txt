@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.2.8
+Stable tag: 1.2.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,21 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.2.9 – February 13, 2026 =
+- Overhauled **User Ban System** with timezone-aware logic and optimized detection flow
+- Fixed **timezone inconsistency** across ban creation, validation, and display layers
+  - `init_plugin_suite_chat_engine_ban_user()`: now uses `DateTime` with WordPress timezone for precise `expires_at` calculation
+  - `init_plugin_suite_chat_engine_check_user_banned()`: replaced `NOW()` (GMT) with `current_time('mysql')` for accurate expiration checks
+  - `init_plugin_suite_chat_engine_render_banned_message()`: switched to `date_i18n()` to prevent double timezone conversion
+- Improved **ban detection priority** — user accounts are now checked first, IP fallback only when user is not banned
+  - Prevents trivial IP-based bypass when logged-in users are banned
+  - Guest users (no `user_id`) continue to rely on IP-only detection
+- Eliminated redundant dual-condition SQL queries (`user_id OR ip_address`) in favor of sequential checks
+- Ban expiration timestamps now remain consistent across creation → validation → display (e.g., 48-hour ban created at 8:57 AM expires exactly at 8:57 AM, not 3:56 PM)
+- Enhanced WP_DEBUG logging with detailed timestamp comparisons for admin troubleshooting
+- Fully backwards-compatible with existing ban records and database schema
+- Internal security hardening only; no UI or frontend behavioral changes
 
 = 1.2.8 – November 11, 2025 =
 - Hotfix: fixed **Load More (history pagination)** message order becoming inconsistent

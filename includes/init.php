@@ -239,7 +239,7 @@ function init_plugin_suite_chat_engine_get_user_ip() {
 }
 
 /**
- * Ban user from chat
+ * Ban user from chat - FIXED FOR REAL
  */
 function init_plugin_suite_chat_engine_ban_user( $user_id = null, $ip_address = null, $display_name = null, $reason = '', $duration_hours = null ) {
     global $wpdb;
@@ -254,7 +254,30 @@ function init_plugin_suite_chat_engine_ban_user( $user_id = null, $ip_address = 
     
     $banned_table = $wpdb->prefix . 'init_chatbox_banned';
     $banned_by = get_current_user_id();
-    $expires_at = $duration_hours ? gmdate( 'Y-m-d H:i:s', strtotime( "+{$duration_hours} hours" ) ) : null;
+    $banned_at = current_time( 'mysql' );
+    $expires_at = null;
+    
+    if ( $duration_hours ) {
+        // Lấy timezone của WordPress
+        $timezone_string = get_option( 'timezone_string' );
+        if ( empty( $timezone_string ) ) {
+            $gmt_offset = get_option( 'gmt_offset' );
+            $timezone_string = timezone_name_from_abbr( '', $gmt_offset * 3600, 0 );
+            if ( false === $timezone_string ) {
+                $timezone_string = 'UTC';
+            }
+        }
+        
+        try {
+            $timezone = new DateTimeZone( $timezone_string );
+            $banned_dt = new DateTime( $banned_at, $timezone );
+            $banned_dt->modify( "+{$duration_hours} hours" );
+            $expires_at = $banned_dt->format( 'Y-m-d H:i:s' );
+        } catch ( Exception $e ) {
+            // Fallback nếu có lỗi
+            $expires_at = null;
+        }
+    }
     
     $data = [
         'user_id' => $user_id,
@@ -262,25 +285,38 @@ function init_plugin_suite_chat_engine_ban_user( $user_id = null, $ip_address = 
         'display_name' => $display_name,
         'reason' => $reason,
         'banned_by' => $banned_by,
-        'banned_at' => current_time( 'mysql' ),
+        'banned_at' => $banned_at,
         'expires_at' => $expires_at,
         'is_active' => 1
     ];
+    
+    // Debug - chỉ khi WP_DEBUG = true
+    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        error_log( sprintf(
+            'Chat Engine Ban Debug - Duration: %s hours, Banned At: %s (%d), Expires At: %s (%d)',
+            $duration_hours ?: 'permanent',
+            $banned_at,
+            isset( $banned_timestamp ) ? $banned_timestamp : 0,
+            $expires_at ?: 'never',
+            isset( $expires_timestamp ) ? $expires_timestamp : 0
+        ) );
+    }
     
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     $result = $wpdb->insert( $banned_table, $data );
     
     if ( $result ) {
-        // Log the ban action - only in debug mode
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             error_log( sprintf( 
-                'Chat Engine: User banned - ID: %s, IP: %s, Name: %s, By: %s, Reason: %s',
+                'Chat Engine: User banned - ID: %s, IP: %s, Name: %s, By: %s, Reason: %s, Expires: %s',
                 $user_id ?: 'N/A',
                 $ip_address ?: 'N/A', 
                 $display_name ?: 'N/A',
                 $banned_by,
-                $reason
+                $reason,
+                $expires_at ?: 'Never'
             ) );
         }
         
@@ -349,7 +385,7 @@ function init_plugin_suite_chat_engine_unban_user( $ban_id = null, $user_id = nu
 }
 
 /**
- * Check if user is banned - FIXED VERSION
+ * Check if user is banned - FIXED TIMEZONE COMPARISON
  */
 function init_plugin_suite_chat_engine_check_user_banned( $user_id = null, $ip_address = null ) {
     global $wpdb;
@@ -358,50 +394,50 @@ function init_plugin_suite_chat_engine_check_user_banned( $user_id = null, $ip_a
         return false;
     }
     
-    $banned_table = $wpdb->prefix . 'init_chatbox_banned';
+    // Lấy thời gian hiện tại theo WordPress timezone
+    $current_time = current_time( 'mysql' );
     
-    if ( $user_id && $ip_address ) {
-        // Check both user ID and IP
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $ban_record = $wpdb->get_row( 
-            $wpdb->prepare(
-                "SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
-                 WHERE (user_id = %d OR ip_address = %s) 
-                 AND is_active = 1 
-                 AND (expires_at IS NULL OR expires_at > NOW()) 
-                 LIMIT 1",
-                $user_id, $ip_address
-            )
-        );
-    } elseif ( $user_id ) {
-        // Check only user ID
+    // Nếu có user_id thì ưu tiên check tài khoản trước
+    if ( $user_id ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $ban_record = $wpdb->get_row( 
             $wpdb->prepare(
                 "SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
                  WHERE user_id = %d 
                  AND is_active = 1 
-                 AND (expires_at IS NULL OR expires_at > NOW()) 
+                 AND (expires_at IS NULL OR expires_at > %s) 
                  LIMIT 1",
-                $user_id
+                $user_id,
+                $current_time  // ← FIX: Dùng current_time thay vì NOW()
             )
         );
-    } else {
-        // Check only IP address
+        
+        if ( $ban_record ) {
+            return $ban_record;
+        }
+    }
+    
+    // Check IP
+    if ( $ip_address ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $ban_record = $wpdb->get_row( 
             $wpdb->prepare(
                 "SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
                  WHERE ip_address = %s 
                  AND is_active = 1 
-                 AND (expires_at IS NULL OR expires_at > NOW()) 
+                 AND (expires_at IS NULL OR expires_at > %s) 
                  LIMIT 1",
-                $ip_address
+                $ip_address,
+                $current_time  // ← FIX: Dùng current_time thay vì NOW()
             )
         );
+        
+        if ( $ban_record ) {
+            return $ban_record;
+        }
     }
     
-    return $ban_record ? $ban_record : false;
+    return false;
 }
 
 /**
@@ -540,7 +576,7 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
 
     try {
         // Truncate bảng message — nhanh, sạch, reset AUTO_INCREMENT
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
         $wpdb->query( "TRUNCATE TABLE {$table_name}" );
 
         // Reset các thống kê liên quan
