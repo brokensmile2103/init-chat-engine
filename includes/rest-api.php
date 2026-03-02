@@ -360,6 +360,13 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
         return new WP_Error( 'unauthorized', __( 'Guests are not allowed to chat.', 'init-chat-engine' ), [ 'status' => 403 ] );
     }
 
+    // Check account age requirement
+    $account_age_check = init_plugin_suite_chat_engine_check_account_age_requirement();
+
+    if ( is_wp_error( $account_age_check ) ) {
+        return $account_age_check;
+    }
+
     if ( ! $display_name ) {
         return new WP_Error( 'missing_name', __( 'Display name is required.', 'init-chat-engine' ), [ 'status' => 400 ] );
     }

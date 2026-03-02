@@ -588,3 +588,18 @@ msgstr "Không thể xóa tin nhắn. Vui lòng thử lại."
 
 msgid "All chat messages deleted successfully."
 msgstr "Đã xóa thành công toàn bộ tin nhắn chat."
+
+msgid "Minimum Account Age"
+msgstr "Tuổi tài khoản tối thiểu"
+
+msgid "Require users to have an account older than X days before participating in chat. Set to 0 to disable."
+msgstr "Yêu cầu người dùng có tài khoản được tạo tối thiểu X ngày trước khi tham gia trò chuyện. Đặt 0 để tắt."
+
+msgid "Minimum account age cannot exceed 3650 days."
+msgstr "Tuổi tài khoản tối thiểu không được vượt quá 3650 ngày."
+
+msgid "Your account must be at least %d days old to participate in the chat."
+msgstr "Tài khoản của bạn phải được tạo ít nhất %d ngày trước khi tham gia trò chuyện."
+
+msgid "Please wait until your account meets the required age to participate."
+msgstr "Vui lòng đợi đến khi tài khoản của bạn đủ thời gian yêu cầu để tham gia."

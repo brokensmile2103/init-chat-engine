@@ -3,7 +3,7 @@
  * Plugin Name: Init Chat Engine
  * Plugin URI: https://inithtml.com/plugin/init-chat-engine/
  * Description: A lightweight, community-focused chat system built with REST API and Vanilla JS. Embed anywhere using the [init_chatbox] shortcode.
- * Version: 1.2.9
+ * Version: 1.3.0
  * Author: Init HTML
  * Author URI: https://inithtml.com/
  * Text Domain: init-chat-engine
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_VERSION',        '1.2.9' );
+define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_VERSION',        '1.3.0' );
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_SLUG',           'init-chat-engine' );
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION',         'init_plugin_suite_chat_engine_settings' );
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_NAMESPACE',      'initchat/v1' );
@@ -30,6 +30,7 @@ define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_INCLUDES_PATH',  INIT_PLUGIN_SUITE_CHAT_E
 define( 'INIT_PLUGIN_SUITE_CHAT_ENGINE_TEMPLATES_PATH', INIT_PLUGIN_SUITE_CHAT_ENGINE_PATH . 'templates/' );
 
 require_once INIT_PLUGIN_SUITE_CHAT_ENGINE_INCLUDES_PATH . 'init.php';
+require_once INIT_PLUGIN_SUITE_CHAT_ENGINE_INCLUDES_PATH . 'utils.php';
 require_once INIT_PLUGIN_SUITE_CHAT_ENGINE_INCLUDES_PATH . 'rest-api.php';
 require_once INIT_PLUGIN_SUITE_CHAT_ENGINE_INCLUDES_PATH . 'shortcodes.php';
 require_once INIT_PLUGIN_SUITE_CHAT_ENGINE_INCLUDES_PATH . 'settings-page.php';

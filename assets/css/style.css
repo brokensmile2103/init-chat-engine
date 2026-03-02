@@ -1303,3 +1303,8 @@
     background: rgba(74, 158, 255, 0.3);
     color: var(--init-chat-text-primary);
 }
+
+.init-chatbox-disabled {
+    pointer-events: none;
+    opacity: 0.6;
+}

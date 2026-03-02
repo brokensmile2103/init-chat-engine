@@ -23,6 +23,11 @@ if ( $ban_check ) {
     return;
 }
 
+// Check account age restriction (frontend state)
+$account_age_check = init_plugin_suite_chat_engine_check_account_age_requirement();
+$is_account_age_blocked = is_wp_error( $account_age_check );
+$account_age_message = $is_account_age_blocked ? $account_age_check->get_error_message() : '';
+
 // Get title from shortcode or use default
 $chatbox_title = '';
 if ( isset( $atts['title'] ) && ! empty( $atts['title'] ) ) {
@@ -40,9 +45,14 @@ if ( isset( $atts['show_avatars'] ) ) {
 if ( isset( $atts['show_timestamps'] ) ) {
     $show_timestamps = filter_var( $atts['show_timestamps'], FILTER_VALIDATE_BOOLEAN );
 }
+
+$wrapper_classes = $container_class;
+if ( $is_account_age_blocked ) {
+    $wrapper_classes .= ' init-chatbox-age-blocked';
+}
 ?>
 
-<div class="<?php echo esc_attr( $container_class ); ?>" 
+<div class="<?php echo esc_attr( $wrapper_classes ); ?>"
      id="<?php echo esc_attr( $container_id ); ?>"
      <?php if ( $container_style ) : ?>style="<?php echo esc_attr( $container_style ); ?>"<?php endif; ?>
      data-show-avatars="<?php echo $show_avatars ? 'true' : 'false'; ?>"
@@ -104,7 +114,7 @@ if ( isset( $atts['show_timestamps'] ) ) {
 
     <?php elseif ( $is_logged_in ) : ?>
         <!-- Logged in user interface -->
-        <div class="init-chatbox-input-wrapper">
+        <div class="init-chatbox-input-wrapper<?php echo $is_account_age_blocked ? ' init-chatbox-disabled' : ''; ?>">
             <form id="init-chatbox-form" class="init-chatbox-form">
                 <div class="init-chatbox-input-group">
                     <input type="text" 
@@ -132,6 +142,18 @@ if ( isset( $atts['show_timestamps'] ) ) {
                 </div>
             </form>
         </div>
+
+        <?php if ( $is_account_age_blocked ) : ?>
+            <div class="init-chatbox-login-required init-chatbox-age-warning">
+                <div class="init-chatbox-login-icon">⏳</div>
+                <div class="init-chatbox-login-content">
+                    <p><?php echo esc_html( $account_age_message ); ?></p>
+                    <small>
+                        <?php esc_html_e( 'Please wait until your account meets the required age to participate.', 'init-chat-engine' ); ?>
+                    </small>
+                </div>
+            </div>
+        <?php endif; ?>
 
     <?php elseif ( $allow_guests ) : ?>
         <!-- Guest interface -->

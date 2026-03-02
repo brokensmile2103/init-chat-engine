@@ -125,7 +125,6 @@ function init_plugin_suite_chat_engine_sanitize_security_settings( $input ) {
 
     $sanitized['enable_word_filter'] = ! empty( $input['enable_word_filter'] ) ? 1 : 0;
     $sanitized['blocked_words'] = isset( $input['blocked_words'] ) ? sanitize_textarea_field( $input['blocked_words'] ) : '';
-    $sanitized['require_moderation'] = ! empty( $input['require_moderation'] ) ? 1 : 0;
 
     // Cleanup settings
     $cleanup_days = isset( $input['cleanup_days'] ) ? absint( $input['cleanup_days'] ) : 30;
@@ -156,6 +155,16 @@ function init_plugin_suite_chat_engine_sanitize_security_settings( $input ) {
     if ( ! empty( $errors ) ) {
         add_settings_error( 'init_chat_security_settings', 'validation_errors', implode( '<br>', $errors ), 'error' );
     }
+
+    // Minimum account age (days)
+    $min_account_age = isset( $input['min_account_age_days'] ) ? absint( $input['min_account_age_days'] ) : 0;
+
+    if ( $min_account_age > 3650 ) { // tối đa 10 năm cho hợp lý
+        $min_account_age = 3650;
+        $errors[] = __( 'Minimum account age cannot exceed 3650 days.', 'init-chat-engine' );
+    }
+
+    $sanitized['min_account_age_days'] = $min_account_age;
 
     return $sanitized;
 }
@@ -364,8 +373,8 @@ function init_plugin_suite_chat_engine_render_security_settings( $settings ) {
     $rate_limit = isset( $settings['rate_limit'] ) ? (int) $settings['rate_limit'] : 60;
     $enable_word_filter = ! empty( $settings['enable_word_filter'] );
     $blocked_words = isset( $settings['blocked_words'] ) ? $settings['blocked_words'] : '';
-    $require_moderation = ! empty( $settings['require_moderation'] );
     $cleanup_days = isset( $settings['cleanup_days'] ) ? (int) $settings['cleanup_days'] : 30;
+    $min_account_age_days = isset( $settings['min_account_age_days'] ) ? (int) $settings['min_account_age_days'] : 0;
     ?>
     <table class="form-table" role="presentation">
         <tr>
@@ -381,6 +390,25 @@ function init_plugin_suite_chat_engine_render_security_settings( $settings ) {
                        value="<?php echo esc_attr( $rate_limit ); ?>" class="small-text">
                 <span><?php esc_html_e( 'messages per minute', 'init-chat-engine' ); ?></span>
                 <p class="description"><?php esc_html_e( 'Maximum number of messages a user can send per minute to prevent spam.', 'init-chat-engine' ); ?></p>
+            </td>
+        </tr>
+
+        <tr>
+            <th scope="row">
+                <label for="init_plugin_suite_chat_engine_min_account_age_days">
+                    <?php esc_html_e( 'Minimum Account Age', 'init-chat-engine' ); ?>
+                </label>
+            </th>
+            <td>
+                <input type="number" min="0" max="3650" step="1"
+                       id="init_plugin_suite_chat_engine_min_account_age_days"
+                       name="init_chat_security_settings[min_account_age_days]"
+                       value="<?php echo esc_attr( $min_account_age_days ); ?>"
+                       class="small-text">
+                <span><?php esc_html_e( 'days', 'init-chat-engine' ); ?></span>
+                <p class="description">
+                    <?php esc_html_e( 'Require users to have an account older than X days before participating in chat. Set to 0 to disable.', 'init-chat-engine' ); ?>
+                </p>
             </td>
         </tr>
 
@@ -440,21 +468,6 @@ function init_plugin_suite_chat_engine_render_security_settings( $settings ) {
                     <p class="description">
                         <?php esc_html_e( 'Selected roles can send messages containing blocked words (bypass the word filter).', 'init-chat-engine' ); ?>
                     </p>
-                </fieldset>
-            </td>
-        </tr>
-
-        <tr>
-            <th scope="row"><?php esc_html_e( 'Moderation', 'init-chat-engine' ); ?></th>
-            <td>
-                <fieldset>
-                    <label for="init_plugin_suite_chat_engine_require_moderation">
-                        <input type="checkbox" id="init_plugin_suite_chat_engine_require_moderation" 
-                               name="init_chat_security_settings[require_moderation]" 
-                               value="1" <?php checked( $require_moderation, true ); ?>>
-                        <?php esc_html_e( 'Require message moderation', 'init-chat-engine' ); ?>
-                    </label>
-                    <p class="description"><?php esc_html_e( 'All messages must be approved before appearing in the chat.', 'init-chat-engine' ); ?></p>
                 </fieldset>
             </td>
         </tr>

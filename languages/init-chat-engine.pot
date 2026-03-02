@@ -588,3 +588,18 @@ msgstr ""
 
 msgid "All chat messages deleted successfully."
 msgstr ""
+
+msgid "Minimum Account Age"
+msgstr ""
+
+msgid "Require users to have an account older than X days before participating in chat. Set to 0 to disable."
+msgstr ""
+
+msgid "Minimum account age cannot exceed 3650 days."
+msgstr ""
+
+msgid "Your account must be at least %d days old to participate in the chat."
+msgstr ""
+
+msgid "Please wait until your account meets the required age to participate."
+msgstr ""

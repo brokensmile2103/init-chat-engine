@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.2.9
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,20 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.0 – March 2, 2026 =
+- Introduced new **Minimum Account Age Requirement** (Security setting)
+- Administrators can now require users to have an account older than **X days** before participating in chat
+- Rule only applies when **guest chatting is disabled** (login required mode)
+- Fully integrated across backend and frontend:
+  - REST `/send` endpoint now enforces account age validation via centralized security check
+  - Shared reusable function `init_plugin_suite_chat_engine_check_account_age_requirement()` ensures single source of truth
+- Frontend UI enhancement:
+  - Chat input is automatically disabled (`pointer-events: none; opacity: 0.6`) when account is too new
+  - Context-aware warning message displayed directly under the input area
+- No impact on guest mode — public chats remain unaffected when guests are allowed
+- Backwards-compatible with existing settings and database schema
+- Security-focused enhancement to mitigate spam, clone accounts, and coordinated war activity
 
 = 1.2.9 – February 13, 2026 =
 - Overhauled **User Ban System** with timezone-aware logic and optimized detection flow
