@@ -492,12 +492,27 @@ function init_plugin_suite_chat_engine_get_user_status( WP_REST_Request $request
  */
 function init_plugin_suite_chat_engine_has_messages() {
     global $wpdb;
-    
-    $exists = $wpdb->get_var( 
+
+    $cache_key   = 'has_messages';
+    $cache_group = 'init_chat_engine';
+
+    // Try cache first
+    $cached = wp_cache_get($cache_key, $cache_group);
+    if ($cached !== false) {
+        return (bool) $cached;
+    }
+
+    // Query DB
+    $exists = $wpdb->get_var(
         "SELECT 1 FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0 LIMIT 1"
     );
 
-    return (bool) $exists;
+    $result = (bool) $exists;
+
+    // Cache for 1 day (86400 seconds)
+    wp_cache_set($cache_key, $result, $cache_group, DAY_IN_SECONDS);
+
+    return $result;
 }
 
 /**

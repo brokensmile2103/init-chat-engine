@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.1 – March 26, 2026 =
+- Performance optimization: added object caching for frequently called checks
+- `init_plugin_suite_chat_engine_has_messages()` now cached (24 hours) to reduce redundant DB queries during render
+- `init_plugin_suite_chat_engine_check_user_banned()` now uses 10-minute cache with multi-key strategy (user ID + IP)
+- Implemented proper cache invalidation on ban/unban actions to ensure real-time accuracy
+- Added negative caching to eliminate repeated queries for non-banned users
+- Internal optimization only — no UI or database changes
+- Improves scalability and reduces database load under high traffic chat environments
 
 = 1.3.0 – March 2, 2026 =
 - Introduced new **Minimum Account Age Requirement** (Security setting)
