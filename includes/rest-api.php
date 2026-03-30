@@ -74,7 +74,37 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
         'permission_callback' => '__return_true',
     ] );
 
-    // REMOVED: Online users endpoint - XÓA LUÔN CŨNG VÔ DỤNG!
+    // POST  /pin  → ghim tin nhắn
+    register_rest_route(
+        INIT_PLUGIN_SUITE_CHAT_ENGINE_NAMESPACE,
+        '/pin',
+        [
+            'methods'             => 'POST',
+            'callback'            => 'init_plugin_suite_chat_engine_rest_pin_message',
+            'permission_callback' => 'init_plugin_suite_chat_engine_admin_permission_check',
+            'args'                => [
+                'message_id' => [
+                    'type'              => 'integer',
+                    'required'          => true,
+                    'minimum'           => 1,
+                    'validate_callback' => function ( $param ) {
+                        return is_numeric( $param ) && $param > 0;
+                    },
+                ],
+            ],
+        ]
+    );
+
+    // DELETE /pin  → bỏ ghim
+    register_rest_route(
+        INIT_PLUGIN_SUITE_CHAT_ENGINE_NAMESPACE,
+        '/pin',
+        [
+            'methods'             => 'DELETE',
+            'callback'            => 'init_plugin_suite_chat_engine_rest_unpin_message',
+            'permission_callback' => 'init_plugin_suite_chat_engine_admin_permission_check',
+        ]
+    );
 }
 
 /**
@@ -326,10 +356,11 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
     init_plugin_suite_chat_engine_update_stat( 'last_activity', current_time( 'mysql' ) );
 
     $response = [
-        'success'   => true,
-        'messages'  => $messages,
-        'count'     => count( $messages ),
-        'has_more'  => count( $messages ) === $limit,
+        'success'        => true,
+        'messages'       => $messages,
+        'count'          => count( $messages ),
+        'has_more'       => count( $messages ) === $limit,
+        'pinned_message' => init_plugin_suite_chat_engine_get_pinned_message(),
     ];
 
     // Chỉ trả updated_messages khi có after_id (polling realtime)
@@ -601,4 +632,61 @@ function init_plugin_suite_chat_engine_moderate_message( WP_REST_Request $reques
     }
     
     return rest_ensure_response( [ 'success' => true, 'action' => $action ] );
+}
+
+// ----------------------------------------------------------------
+// Permission: chỉ admin
+// ----------------------------------------------------------------
+function init_plugin_suite_chat_engine_admin_permission_check( WP_REST_Request $request ) {
+    // Verify nonce
+    $valid = wp_verify_nonce(
+        $request->get_header( 'X-WP-Nonce' ),
+        'wp_rest'
+    );
+    if ( ! $valid ) {
+        return new WP_Error( 'invalid_nonce', __( 'Invalid nonce.', 'init-chat-engine' ), [ 'status' => 403 ] );
+    }
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), [ 'status' => 403 ] );
+    }
+
+    return true;
+}
+
+// ----------------------------------------------------------------
+// Callback: POST /pin
+// ----------------------------------------------------------------
+function init_plugin_suite_chat_engine_rest_pin_message( WP_REST_Request $request ) {
+    $message_id = (int) $request->get_param( 'message_id' );
+
+    $result = init_plugin_suite_chat_engine_pin_message( $message_id );
+
+    if ( is_wp_error( $result ) ) {
+        return $result;
+    }
+
+    // Trả về data đầy đủ để JS cập nhật UI ngay, không cần reload
+    $pinned = init_plugin_suite_chat_engine_get_pinned_message();
+
+    return rest_ensure_response( [
+        'success'        => true,
+        'pinned_message' => $pinned,
+    ] );
+}
+
+// ----------------------------------------------------------------
+// Callback: DELETE /pin
+// ----------------------------------------------------------------
+function init_plugin_suite_chat_engine_rest_unpin_message( WP_REST_Request $request ) {
+    $result = init_plugin_suite_chat_engine_unpin_message();
+
+    if ( is_wp_error( $result ) ) {
+        return $result;
+    }
+
+    return rest_ensure_response( [
+        'success'        => true,
+        'pinned_message' => null,
+    ] );
 }

@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,18 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.2 – March 30, 2026 =
+- Introduced Pin Message feature for chat moderation (admin only)
+- Allows pinning a single message to the top of the chat box (auto-replaces previous pin)
+- Added hover-based Pin/Unpin button on messages for admins with dynamic state handling
+- Implemented pinned message banner with jump-to-message and highlight animation
+- Added REST endpoints: POST /pin and DELETE /pin (nonce-verified, admin only)
+- `GET /messages` now includes `pinned_message` for real-time sync across clients
+- Pin state cached (5 minutes) with immediate invalidation on update
+- Uses existing database (`init_chatbox_stats`) — no schema changes required
+- Fully translation-ready via `InitChatEngineData.i18n`
+- Fully backwards-compatible and does not affect existing chat flow
 
 = 1.3.1 – March 26, 2026 =
 - Performance optimization: added object caching for frequently called checks

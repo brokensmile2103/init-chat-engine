@@ -117,6 +117,7 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = [] ) {
         'show_timestamps'      => $show_timestamps,
         'max_message_length'   => isset( $settings['max_message_length'] ) ? (int) $settings['max_message_length'] : 500,
         'rate_limit'           => isset( $settings['rate_limit'] ) ? (int) $settings['rate_limit'] : 60,
+        'is_admin'             => current_user_can('manage_options'),
         'favicon'              => esc_url( $site_icon_url ),
         'theme'                => ! empty( $atts['theme'] ) ? sanitize_text_field( $atts['theme'] ) : 'default',
         'shortcode_atts'       => [
@@ -148,6 +149,17 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = [] ) {
             'minutes_ago'          => __( 'minutes ago', 'init-chat-engine' ),
             'hours_ago'            => __( 'hours ago', 'init-chat-engine' ),
             'days_ago'             => __( 'days ago', 'init-chat-engine' ),
+            'pinned_label'         => __( 'Pinned message', 'init-chat-engine' ),
+            'pinned_unpin'         => __( 'Unpin', 'init-chat-engine' ),
+            'pin_action'           => __( 'Pin', 'init-chat-engine' ),
+            'unpin_action'         => __( 'Unpin', 'init-chat-engine' ),
+            'pin_this_message'     => __( 'Pin this message', 'init-chat-engine' ),
+            'unpin_this_message'   => __( 'Unpin this message', 'init-chat-engine' ),
+            'pin_failed'           => __( 'Could not pin message. Please try again.', 'init-chat-engine' ),
+            'unpin_failed'         => __( 'Could not unpin message. Please try again.', 'init-chat-engine' ),
+            'pin_not_loaded'       => __( 'Pinned message is not loaded yet. Scroll up to load history.', 'init-chat-engine' ),
+            'pin_connect_error'    => __( 'Connection error while pinning.', 'init-chat-engine' ),
+            'unpin_connect_error'  => __( 'Connection error while unpinning.', 'init-chat-engine' ),
         ],
     ];
     

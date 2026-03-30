@@ -688,3 +688,136 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
         return new WP_Error( 'db_error', 'Failed to delete messages: ' . $e->getMessage() );
     }
 }
+
+/**
+ * Ghim một tin nhắn (chỉ admin).
+ * Lưu message_id vào stats table với key 'pinned_message_id'.
+ * Lưu snapshot nội dung để tránh query thêm khi render.
+ *
+ * @param  int       $message_id  ID của tin nhắn cần ghim.
+ * @return true|WP_Error
+ */
+function init_plugin_suite_chat_engine_pin_message( int $message_id ) {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), [ 'status' => 403 ] );
+    }
+ 
+    global $wpdb;
+ 
+    // Kiểm tra message có tồn tại và chưa bị xoá không
+    $msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->prepare(
+            "SELECT id, user_id, display_name, message, created_at
+             FROM `{$wpdb->prefix}init_chatbox_msgs`
+             WHERE id = %d AND is_deleted = 0
+             LIMIT 1",
+            $message_id
+        )
+    );
+ 
+    if ( ! $msg ) {
+        return new WP_Error( 'not_found', __( 'Message not found.', 'init-chat-engine' ), [ 'status' => 404 ] );
+    }
+ 
+    // Lưu ID
+    init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', $message_id );
+ 
+    // Lưu snapshot (JSON) để GET /messages không cần query thêm
+    $snapshot = wp_json_encode( [
+        'id'           => (int) $msg->id,
+        'user_id'      => $msg->user_id ? (int) $msg->user_id : null,
+        'display_name' => $msg->display_name,
+        'message'      => $msg->message,
+        'created_at'   => $msg->created_at,
+        'pinned_by'    => get_current_user_id(),
+        'pinned_at'    => current_time( 'mysql' ),
+    ] );
+    init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', $snapshot );
+ 
+    // Xoá cache
+    wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+ 
+    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        error_log( sprintf(
+            'Init Chat Engine: Message #%d pinned by admin #%d',
+            $message_id,
+            get_current_user_id()
+        ) );
+    }
+ 
+    return true;
+}
+ 
+/**
+ * Bỏ ghim tin nhắn (chỉ admin).
+ *
+ * @return true|WP_Error
+ */
+function init_plugin_suite_chat_engine_unpin_message() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), [ 'status' => 403 ] );
+    }
+ 
+    init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', '' );
+    init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', '' );
+ 
+    wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+ 
+    return true;
+}
+ 
+/**
+ * Lấy tin nhắn đang ghim (có cache).
+ * Trả về array data hoặc null nếu chưa ghim.
+ *
+ * @return array|null
+ */
+function init_plugin_suite_chat_engine_get_pinned_message() {
+    $cache_group = 'init_chat_engine';
+    $cache_key   = 'pinned_message';
+    $cached      = wp_cache_get( $cache_key, $cache_group );
+ 
+    if ( $cached !== false ) {
+        return $cached ?: null; // false = cache miss, '' = no pin
+    }
+ 
+    $pinned_id = init_plugin_suite_chat_engine_get_stat( 'pinned_message_id', '' );
+ 
+    if ( empty( $pinned_id ) ) {
+        wp_cache_set( $cache_key, '', $cache_group, 5 * MINUTE_IN_SECONDS );
+        return null;
+    }
+ 
+    $snapshot_json = init_plugin_suite_chat_engine_get_stat( 'pinned_message_snapshot', '' );
+ 
+    if ( ! empty( $snapshot_json ) ) {
+        $data = json_decode( $snapshot_json, true );
+        if ( $data ) {
+            wp_cache_set( $cache_key, $data, $cache_group, 5 * MINUTE_IN_SECONDS );
+            return $data;
+        }
+    }
+ 
+    // Fallback: query trực tiếp nếu snapshot bị mất
+    global $wpdb;
+    $msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->prepare(
+            "SELECT id, user_id, display_name, message, created_at
+             FROM `{$wpdb->prefix}init_chatbox_msgs`
+             WHERE id = %d AND is_deleted = 0
+             LIMIT 1",
+            (int) $pinned_id
+        ),
+        ARRAY_A
+    );
+ 
+    if ( ! $msg ) {
+        // Message bị xoá → tự động bỏ ghim
+        init_plugin_suite_chat_engine_unpin_message();
+        return null;
+    }
+ 
+    wp_cache_set( $cache_key, $msg, $cache_group, 5 * MINUTE_IN_SECONDS );
+    return $msg;
+}

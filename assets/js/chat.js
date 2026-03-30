@@ -885,6 +885,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return response.json();
             })
             .then(data => {
+                handlePinnedFromResponse(data);
+                if (window._initChatPinHandleResponse) window._initChatPinHandleResponse(data);
                 // Reset error counters on success
                 polling.consecutiveErrors = 0;
                 state.retryCount = 0;
@@ -1461,6 +1463,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return response.json();
             })
             .then(data => {
+                handlePinnedFromResponse(data);
+                if (window._initChatPinHandleResponse) window._initChatPinHandleResponse(data);
                 if (messagesListEl) messagesListEl.innerHTML = '';
                 
                 if (data.success && data.messages && data.messages.length > 0) {
@@ -1564,4 +1568,336 @@ document.addEventListener('DOMContentLoaded', function () {
     if (window.performance && window.performance.mark) {
         window.performance.mark('chat-script-loaded');
     }
+
+    // ============================================================
+    // PINNED MESSAGE FEATURE
+    // ============================================================
+
+    // ---- Helpers i18n ------------------------------------------
+
+    /**
+     * Lấy chuỗi i18n từ config, fallback sang giá trị mặc định
+     * để tránh hiển thị undefined nếu key bị thiếu.
+     */
+    function pinT( key, fallback ) {
+        return ( config.i18n && config.i18n[ key ] ) ? config.i18n[ key ] : ( fallback || key );
+    }
+
+    // ---- Config ------------------------------------------------
+
+    // Tính base namespace URL từ fetchUrl đã có trong config
+    // config.fetchUrl = .../namespace/messages  → cắt /messages
+    const PIN_NAMESPACE_URL = config.fetchUrl
+        ? config.fetchUrl.replace( /\/messages\/?(\?.*)?$/, '' )
+        : '';
+
+    const isAdmin = !! InitChatEngineData.is_admin;
+
+    // ---- State -------------------------------------------------
+
+    let pinnedState = {
+        currentPinnedId : null,
+        data            : null,
+        isPinning       : false,
+    };
+
+    // ---- DOM: Banner -------------------------------------------
+
+    const pinnedBanner = ( function createPinnedBanner() {
+        const el = document.createElement( 'div' );
+        el.id        = 'init-chatbox-pinned-banner';
+        el.className = 'init-chatbox-pinned-banner';
+        el.setAttribute( 'aria-label', pinT( 'pinned_label', 'Pinned message' ) );
+        el.setAttribute( 'role', 'region' );
+        el.style.display = 'none';
+
+        el.innerHTML = `
+            <div class="init-chatbox-pinned-inner">
+                <span class="init-chatbox-pinned-icon" aria-hidden="true">📌</span>
+                <div class="init-chatbox-pinned-clickable" role="button" tabindex="0">
+                    <span class="init-chatbox-pinned-label"></span>
+                    <span class="init-chatbox-pinned-text"></span>
+                </div>
+                <button
+                    type="button"
+                    class="init-chatbox-pinned-unpin ${isAdmin ? '' : 'ice-hidden'}"
+                ></button>
+            </div>
+        `;
+
+        // Gắn text & aria sau khi i18n sẵn sàng
+        const labelEl   = el.querySelector( '.init-chatbox-pinned-label' );
+        const unpinBtn  = el.querySelector( '.init-chatbox-pinned-unpin' );
+
+        if ( labelEl ) {
+            labelEl.textContent = pinT( 'pinned_label', 'Pinned message' );
+        }
+        if ( unpinBtn ) {
+            unpinBtn.textContent = pinT( 'pinned_unpin', 'Unpin' );
+            unpinBtn.title       = pinT( 'unpin_this_message', 'Unpin this message' );
+            unpinBtn.setAttribute( 'aria-label', pinT( 'unpin_this_message', 'Unpin this message' ) );
+        }
+
+        // Gắn vào DOM: ngay trước khung tin nhắn
+        if ( messagesEl && messagesEl.parentNode ) {
+            messagesEl.parentNode.insertBefore( el, messagesEl );
+        } else if ( root ) {
+            root.insertBefore( el, root.firstChild );
+        }
+
+        return el;
+    } )();
+
+    // ---- Render Banner -----------------------------------------
+
+    function renderPinnedBanner( pinData ) {
+        if ( ! pinnedBanner ) return;
+
+        if ( ! pinData || ! pinData.id ) {
+            pinnedBanner.style.display = 'none';
+            pinnedState.currentPinnedId = null;
+            pinnedState.data = null;
+
+            messagesListEl && messagesListEl
+                .querySelectorAll( '.pinned-highlight' )
+                .forEach( function ( el ) { el.classList.remove( 'pinned-highlight' ); } );
+
+            updateAllPinButtons( null );
+            return;
+        }
+
+        pinnedState.currentPinnedId = pinData.id;
+        pinnedState.data = pinData;
+
+        const rawText = ( pinData.message || '' )
+            .replace( /<[^>]+>/g, '' )
+            .replace( /\s+/g, ' ' )
+            .trim();
+        const preview = rawText.length > 100
+            ? rawText.substring( 0, 100 ) + '\u2026'
+            : rawText;
+
+        const textEl = pinnedBanner.querySelector( '.init-chatbox-pinned-text' );
+        if ( textEl ) textEl.textContent = preview;
+
+        pinnedBanner.style.display = '';
+        updateAllPinButtons( pinData.id );
+    }
+
+    // ---- Pin button per message --------------------------------
+
+    function addPinButtonToMessage( msgEl, messageId ) {
+        if ( ! isAdmin || ! msgEl ) return;
+        if ( msgEl.querySelector( '.init-chatbox-pin-btn' ) ) return;
+
+        const isCurrentlyPinned = pinnedState.currentPinnedId !== null
+            && String( pinnedState.currentPinnedId ) === String( messageId );
+
+        const btn = document.createElement( 'button' );
+        btn.type      = 'button';
+        btn.className = 'init-chatbox-pin-btn' + ( isCurrentlyPinned ? ' pinned-active' : '' );
+        btn.dataset.msgId = messageId;
+        btn.textContent = pinT( isCurrentlyPinned ? 'unpin_action' : 'pin_action', isCurrentlyPinned ? 'Unpin' : 'Pin' );
+        btn.title       = pinT( isCurrentlyPinned ? 'unpin_this_message' : 'pin_this_message', isCurrentlyPinned ? 'Unpin this message' : 'Pin this message' );
+        btn.setAttribute( 'aria-label', btn.title );
+
+        btn.addEventListener( 'click', function ( e ) {
+            e.stopPropagation();
+            const alreadyPinned = pinnedState.currentPinnedId !== null
+                && String( pinnedState.currentPinnedId ) === String( this.dataset.msgId );
+            if ( alreadyPinned ) {
+                doUnpin();
+            } else {
+                doPin( parseInt( this.dataset.msgId, 10 ) );
+            }
+        } );
+
+        msgEl.appendChild( btn );
+    }
+
+    function updateAllPinButtons( pinnedId ) {
+        if ( ! messagesListEl ) return;
+
+        messagesListEl.querySelectorAll( '.init-chatbox-pin-btn' ).forEach( function ( btn ) {
+            const isThisPinned = pinnedId !== null && String( pinnedId ) === String( btn.dataset.msgId );
+            btn.textContent    = pinT( isThisPinned ? 'unpin_action' : 'pin_action', isThisPinned ? 'Unpin' : 'Pin' );
+            btn.title          = pinT( isThisPinned ? 'unpin_this_message' : 'pin_this_message', isThisPinned ? 'Unpin this message' : 'Pin this message' );
+            btn.setAttribute( 'aria-label', btn.title );
+            btn.classList.toggle( 'pinned-active', !! isThisPinned );
+        } );
+    }
+
+    // ---- API calls --------------------------------------------
+
+    function doPin( messageId ) {
+        if ( pinnedState.isPinning ) return;
+        pinnedState.isPinning = true;
+
+        messagesListEl && messagesListEl
+            .querySelectorAll( '.init-chatbox-pin-btn' )
+            .forEach( function ( b ) { b.disabled = true; } );
+
+        fetch( PIN_NAMESPACE_URL + '/pin', {
+            method  : 'POST',
+            headers : {
+                'Content-Type' : 'application/json',
+                'X-WP-Nonce'   : InitChatEngineData.nonce,
+            },
+            body: JSON.stringify( { message_id: messageId } ),
+        } )
+        .then( function ( r ) {
+            if ( ! r.ok ) throw new Error( 'HTTP ' + r.status );
+            return r.json();
+        } )
+        .then( function ( data ) {
+            if ( data.success ) {
+                renderPinnedBanner( data.pinned_message );
+            } else {
+                showError( data.message || pinT( 'pin_failed', 'Could not pin message.' ) );
+            }
+        } )
+        .catch( function () {
+            showError( pinT( 'pin_connect_error', 'Connection error while pinning.' ) );
+        } )
+        .finally( function () {
+            pinnedState.isPinning = false;
+            messagesListEl && messagesListEl
+                .querySelectorAll( '.init-chatbox-pin-btn' )
+                .forEach( function ( b ) { b.disabled = false; } );
+        } );
+    }
+
+    function doUnpin() {
+        if ( pinnedState.isPinning ) return;
+        pinnedState.isPinning = true;
+
+        const unpinBtn = pinnedBanner.querySelector( '.init-chatbox-pinned-unpin' );
+        if ( unpinBtn ) unpinBtn.disabled = true;
+
+        fetch( PIN_NAMESPACE_URL + '/pin', {
+            method  : 'DELETE',
+            headers : { 'X-WP-Nonce': InitChatEngineData.nonce },
+        } )
+        .then( function ( r ) {
+            if ( ! r.ok ) throw new Error( 'HTTP ' + r.status );
+            return r.json();
+        } )
+        .then( function ( data ) {
+            if ( data.success ) {
+                renderPinnedBanner( null );
+            } else {
+                showError( data.message || pinT( 'unpin_failed', 'Could not unpin message.' ) );
+            }
+        } )
+        .catch( function () {
+            showError( pinT( 'unpin_connect_error', 'Connection error while unpinning.' ) );
+        } )
+        .finally( function () {
+            pinnedState.isPinning = false;
+            if ( unpinBtn ) unpinBtn.disabled = false;
+        } );
+    }
+
+    // ---- Banner buttons ----------------------------------------
+
+    // Click vào vùng nội dung banner → jump đến tin nhắn
+    const pinnedClickable = pinnedBanner.querySelector( '.init-chatbox-pinned-clickable' );
+    if ( pinnedClickable ) {
+        const jumpToPinned = function () {
+            if ( ! pinnedState.currentPinnedId || ! messagesListEl ) return;
+
+            const target = messagesListEl.querySelector(
+                '[data-message-id="' + pinnedState.currentPinnedId + '"]'
+            );
+
+            if ( target ) {
+                target.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+                target.classList.remove( 'pinned-highlight' );
+                requestAnimationFrame( function () {
+                    target.classList.add( 'pinned-highlight' );
+                    setTimeout( function () {
+                        target.classList.remove( 'pinned-highlight' );
+                    }, 1800 );
+                } );
+            } else {
+                showError( pinT( 'pin_not_loaded', 'Pinned message is not loaded yet. Scroll up to load history.' ), true );
+            }
+        };
+
+        pinnedClickable.addEventListener( 'click', jumpToPinned );
+
+        // Keyboard: Enter / Space
+        pinnedClickable.addEventListener( 'keydown', function ( e ) {
+            if ( e.key === 'Enter' || e.key === ' ' ) {
+                e.preventDefault();
+                jumpToPinned();
+            }
+        } );
+    }
+
+    const unpinBannerBtn = pinnedBanner.querySelector( '.init-chatbox-pinned-unpin' );
+    if ( unpinBannerBtn && isAdmin ) {
+        unpinBannerBtn.addEventListener( 'click', doUnpin );
+    }
+
+    // ---- MutationObserver: thêm pin button vào message mới ----
+
+    if ( isAdmin && messagesListEl ) {
+        const pinObserver = new MutationObserver( function ( mutations ) {
+            mutations.forEach( function ( mutation ) {
+                mutation.addedNodes.forEach( function ( node ) {
+                    if ( node.nodeType !== Node.ELEMENT_NODE ) return;
+
+                    if ( node.classList && node.classList.contains( 'init-chatbox-message' ) ) {
+                        addPinButtonToMessage( node, node.dataset.messageId );
+                        return;
+                    }
+
+                    if ( node.querySelectorAll ) {
+                        node.querySelectorAll( '.init-chatbox-message[data-message-id]' )
+                            .forEach( function ( el ) {
+                                addPinButtonToMessage( el, el.dataset.messageId );
+                            } );
+                    }
+                } );
+            } );
+        } );
+
+        pinObserver.observe( messagesListEl, { childList: true, subtree: false } );
+    }
+
+    // ---- handlePinnedFromResponse ------------------------------
+
+    function handlePinnedFromResponse( data ) {
+        if ( ! data || ! data.success ) return;
+
+        if ( Object.prototype.hasOwnProperty.call( data, 'pinned_message' ) ) {
+            const incoming   = data.pinned_message;
+            const incomingId = incoming ? incoming.id : null;
+
+            // Chỉ re-render khi ID thay đổi (tránh flicker khi polling)
+            if ( incomingId !== pinnedState.currentPinnedId ) {
+                renderPinnedBanner( incoming || null );
+            }
+        }
+    }
+
+    window._initChatPinHandleResponse = handlePinnedFromResponse;
+
+    // ---- Load trạng thái pin ban đầu --------------------------
+
+    ( function loadInitialPinnedState() {
+        fetch( config.fetchUrl + '?limit=1' )
+            .then( function ( r ) { return r.json(); } )
+            .then( function ( data ) {
+                if ( data && data.pinned_message ) {
+                    renderPinnedBanner( data.pinned_message );
+                }
+            } )
+            .catch( function () { /* fail silently */ } );
+    } )();
+
+    // ============================================================
+    // END PINNED MESSAGE FEATURE
+    // ============================================================
 });
