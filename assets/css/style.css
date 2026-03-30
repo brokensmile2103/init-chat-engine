@@ -1311,20 +1311,32 @@
 
 /* ── Pinned Banner ─────────────────────────────────────────── */
 .init-chatbox-pinned-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+
     display: flex;
     align-items: stretch;
-    background: linear-gradient(135deg,
-        rgba(245, 158, 11, 0.12) 0%,
-        rgba(245, 158, 11, 0.06) 100%);
+
+    background: #f7efdf;
     border-left: 3px solid #f59e0b;
     border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+
     padding: 8px 12px;
     gap: 8px;
     font-size: 13px;
     line-height: 1.4;
-    animation: pinBannerIn 0.25s ease;
-    position: relative;
-    z-index: 10;
+
+    animation: pinBannerIn 0.2s ease;
+
+    z-index: 20;
+
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.init-chatbox-theme-dark .init-chatbox-pinned-banner {
+    background: #2d3748;
 }
 
 @keyframes pinBannerIn {
@@ -1452,4 +1464,30 @@
 @keyframes pinHighlight {
     0%   { outline-color: rgba(245, 158, 11, 0.95); }
     100% { outline-color: rgba(245, 158, 11, 0.0); }
+}
+
+.init-chatbox-pinned-expand {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    outline: none;
+    font-size: 14px;
+    padding: 2px 6px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.init-chatbox-theme-dark .init-chatbox-pinned-expand {
+    color: var(--init-chat-text-secondary);
+}
+
+.init-chatbox-pinned-expand:hover {
+    opacity: 1;
+}
+
+.init-chatbox-pinned-text.expanded {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
 }

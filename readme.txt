@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.3 – March 30, 2026 =
+- Added expand/collapse support for pinned message content in banner
+- Allows viewing full pinned message without jumping to original message
+- Stores full message content via `dataset` to avoid additional queries or requests
+- Updated pinned banner to use absolute positioning to eliminate layout shift (CLS)
+- Ensures stable layout when banner appears or updates
+- Refined animation and interaction for smoother realtime UX
+- No changes to API, database, or existing chat flow
 
 = 1.3.2 – March 30, 2026 =
 - Introduced Pin Message feature for chat moderation (admin only)

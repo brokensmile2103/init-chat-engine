@@ -1618,6 +1618,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     <span class="init-chatbox-pinned-label"></span>
                     <span class="init-chatbox-pinned-text"></span>
                 </div>
+            <button type="button" class="init-chatbox-pinned-expand" aria-label="Expand">
+                ⤢
+            </button>
                 <button
                     type="button"
                     class="init-chatbox-pinned-unpin ${isAdmin ? '' : 'ice-hidden'}"
@@ -1646,6 +1649,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return el;
+
+
     } )();
 
     // ---- Render Banner -----------------------------------------
@@ -1655,6 +1660,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if ( ! pinData || ! pinData.id ) {
             pinnedBanner.style.display = 'none';
+            pinnedBanner.classList.remove('expanded');
             pinnedState.currentPinnedId = null;
             pinnedState.data = null;
 
@@ -1678,7 +1684,10 @@ document.addEventListener('DOMContentLoaded', function () {
             : rawText;
 
         const textEl = pinnedBanner.querySelector( '.init-chatbox-pinned-text' );
-        if ( textEl ) textEl.textContent = preview;
+        if ( textEl ) {
+            textEl.textContent = preview;
+            textEl.dataset.full = rawText;
+        }
 
         pinnedBanner.style.display = '';
         updateAllPinButtons( pinData.id );
@@ -1838,6 +1847,37 @@ document.addEventListener('DOMContentLoaded', function () {
     const unpinBannerBtn = pinnedBanner.querySelector( '.init-chatbox-pinned-unpin' );
     if ( unpinBannerBtn && isAdmin ) {
         unpinBannerBtn.addEventListener( 'click', doUnpin );
+    }
+
+    const expandBtn = pinnedBanner.querySelector('.init-chatbox-pinned-expand');
+
+    if (expandBtn) {
+        let expanded = false;
+
+        expandBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+
+            const textEl = pinnedBanner.querySelector('.init-chatbox-pinned-text');
+            if (!textEl) return;
+
+            const full = textEl.dataset.full || textEl.textContent;
+
+            if (!expanded) {
+                textEl.textContent = full;
+                textEl.classList.add('expanded');
+                expandBtn.textContent = '⤡';
+                expanded = true;
+            } else {
+                const preview = full.length > 100
+                    ? full.substring(0, 100) + '\u2026'
+                    : full;
+
+                textEl.textContent = preview;
+                textEl.classList.remove('expanded');
+                expandBtn.textContent = '⤢';
+                expanded = false;
+            }
+        });
     }
 
     // ---- MutationObserver: thêm pin button vào message mới ----
