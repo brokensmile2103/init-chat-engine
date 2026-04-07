@@ -603,3 +603,36 @@ msgstr ""
 
 msgid "Please wait until your account meets the required age to participate."
 msgstr ""
+
+msgid "%d messages deleted successfully."
+msgstr ""
+
+msgid "Select bulk action"
+msgstr ""
+
+msgid "Bulk Actions"
+msgstr ""
+
+msgid "Delete Selected"
+msgstr ""
+
+msgid "Ban Selected Users"
+msgstr ""
+
+msgid "Apply"
+msgstr ""
+
+msgid "Selected:"
+msgstr ""
+
+msgid "Ban Duration (hours, 0 = permanent):"
+msgstr ""
+
+msgid "Reason:"
+msgstr ""
+
+msgid "Violation of chat rules"
+msgstr ""
+
+msgid "Messages per page"
+msgstr ""

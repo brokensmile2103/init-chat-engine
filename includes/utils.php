@@ -65,3 +65,25 @@ function init_plugin_suite_chat_engine_check_account_age_requirement() {
 
     return true;
 }
+
+/**
+ * Clear all message-related cache
+ */
+function init_plugin_suite_chat_engine_clear_message_cache() {
+    global $wpdb;
+
+    // Xóa toàn bộ keys trong group (Redis/Memcached)
+    wp_cache_flush_group( 'init_chat_engine' );
+
+    // Fallback: xóa thủ công các cache key phổ biến
+    for ( $page = 1; $page <= 10; $page++ ) {
+        wp_cache_delete( 'init_chat_messages_' . md5( '' . $page ), '' );
+        wp_cache_delete( 'init_chat_total_messages_' . md5( '' ), '' );
+    }
+
+    // Xóa cache stats
+    wp_cache_delete( 'init_chat_stats_' . current_time( 'Y-m-d' ), '' );
+    wp_cache_delete( 'init_chat_daily_stats_' . current_time( 'Y-m-d' ), '' );
+    wp_cache_delete( 'init_chat_top_users_' . current_time( 'Y-m-d' ), '' );
+    wp_cache_delete( 'init_chat_db_size', '' );
+}

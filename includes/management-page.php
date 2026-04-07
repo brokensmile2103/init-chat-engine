@@ -16,6 +16,31 @@ function init_plugin_suite_chat_engine_register_management_page() {
         'init_plugin_suite_chat_engine_render_management_page'
     );
 
+    // Tự handle save per_page, không dựa vào WP screen option API
+    add_action( 'load-' . $hook_suffix, function() {
+        // Xử lý khi user bấm Apply trong screen options
+        if (
+            isset( $_POST['wp_screen_options']['option'], $_POST['wp_screen_options']['value'] )
+            && $_POST['wp_screen_options']['option'] === 'init_chat_messages_per_page'
+            && check_admin_referer( 'screen-options-nonce', 'screenoptionnonce' )
+        ) {
+            $per_page = absint( $_POST['wp_screen_options']['value'] );
+            $per_page = max( 5, min( 200, $per_page ) ); // giới hạn 5-200
+            update_user_meta( get_current_user_id(), 'init_chat_messages_per_page', $per_page );
+
+            // Redirect để tránh resubmit form
+            wp_safe_redirect( remove_query_arg( '_wp_http_referer' ) );
+            exit;
+        }
+
+        // Đăng ký screen option để WP render cái box
+        add_screen_option( 'per_page', [
+            'label'   => __( 'Messages per page', 'init-chat-engine' ),
+            'default' => 20,
+            'option'  => 'init_chat_messages_per_page',
+        ] );
+    } );
+
     // Enqueue asset đúng screen
     add_action('admin_enqueue_scripts', function($hook) use ($hook_suffix) {
         if ($hook !== $hook_suffix) return;
@@ -97,6 +122,11 @@ function init_plugin_suite_chat_engine_render_management_page() {
                             [ '%d' ]
                         );
                         if ( $result ) $deleted_count++;
+                    }
+
+                    // Fix: clear cache sau khi xóa
+                    if ( $deleted_count > 0 ) {
+                        init_plugin_suite_chat_engine_clear_message_cache();
                     }
                     
                     echo '<div class="notice notice-success"><p>' . 
@@ -180,36 +210,40 @@ function init_plugin_suite_chat_engine_render_management_page() {
                 break;
                 
             case 'delete_message':
-                $message_id = isset( $_GET['message_id'] ) ? absint( $_GET['message_id'] ) : 0;
-                if ( $message_id ) {
-                    global $wpdb;
-                    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-                    $result = $wpdb->update(
-                        $wpdb->prefix . 'init_chatbox_msgs',
-                        [ 'is_deleted' => 1 ],
-                        [ 'id' => $message_id ],
-                        [ '%d' ],
-                        [ '%d' ]
-                    );
-                    if ( $result ) {
-                        echo '<div class="notice notice-success"><p>' . esc_html__( 'Message deleted successfully.', 'init-chat-engine' ) . '</p></div>';
-                    } else {
-                        echo '<div class="notice notice-error"><p>' . esc_html__( 'Failed to delete message.', 'init-chat-engine' ) . '</p></div>';
-                    }
+            $message_id = isset( $_GET['message_id'] ) ? absint( $_GET['message_id'] ) : 0;
+            if ( $message_id ) {
+                global $wpdb;
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+                $result = $wpdb->update(
+                    $wpdb->prefix . 'init_chatbox_msgs',
+                    [ 'is_deleted' => 1 ],
+                    [ 'id' => $message_id ],
+                    [ '%d' ],
+                    [ '%d' ]
+                );
+                if ( $result ) {
+                    // Fix: clear cache sau khi xóa
+                    init_plugin_suite_chat_engine_clear_message_cache();
+                    echo '<div class="notice notice-success"><p>' . esc_html__( 'Message deleted successfully.', 'init-chat-engine' ) . '</p></div>';
+                } else {
+                    echo '<div class="notice notice-error"><p>' . esc_html__( 'Failed to delete message.', 'init-chat-engine' ) . '</p></div>';
                 }
-                break;
+            }
+            break;
         }
     }
     
     // Handle manual cleanup
-    $nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
-    if ( isset( $_GET['action'] ) && $_GET['action'] === 'cleanup' && $nonce && wp_verify_nonce( $nonce, 'init_chat_cleanup' ) ) {
+    // Fix: dùng biến riêng thay vì tái sử dụng $nonce từ block trên
+    $get_nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+    if ( isset( $_GET['action'] ) && $_GET['action'] === 'cleanup' && $get_nonce && wp_verify_nonce( $get_nonce, 'init_chat_cleanup' ) ) {
         init_plugin_suite_chat_engine_cleanup_messages();
+        init_plugin_suite_chat_engine_clear_message_cache(); // clear cache luôn
         echo '<div class="notice notice-success"><p>' . esc_html__( 'Cleanup completed successfully.', 'init-chat-engine' ) . '</p></div>';
     }
 
     // Handle nuclear delete (delete all messages)
-    if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_all_messages' && $nonce && wp_verify_nonce( $nonce, 'init_chat_delete_all' ) ) {
+    if ( isset( $_GET['action'] ) && $_GET['action'] === 'delete_all_messages' && $get_nonce && wp_verify_nonce( $get_nonce, 'init_chat_delete_all' ) ) {
         $result = init_plugin_suite_chat_engine_delete_all_messages();
         if ( is_wp_error( $result ) ) {
             echo '<div class="notice notice-error"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
@@ -263,7 +297,12 @@ function init_plugin_suite_chat_engine_render_messages_management() {
     global $wpdb;
     
     $table_name = $wpdb->prefix . 'init_chatbox_msgs';
-    $per_page = 20;
+    
+    $per_page = (int) get_user_meta( get_current_user_id(), 'init_chat_messages_per_page', true );
+    if ( $per_page < 1 ) {
+        $per_page = 20;
+    }
+
     // phpcs:ignore WordPress.Security.NonceVerification.Recommended
     $current_page = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
     $offset = ( $current_page - 1 ) * $per_page;
@@ -401,7 +440,7 @@ function init_plugin_suite_chat_engine_render_messages_management() {
                 </label>
                 <label style="margin-left: 15px;">
                     <?php esc_html_e( 'Reason:', 'init-chat-engine' ); ?>
-                    <input type="text" name="ban_reason" value="Violation of chat rules" style="width: 200px;">
+                    <input type="text" name="ban_reason" value="<?php esc_attr_e( 'Violation of chat rules', 'init-chat-engine' ); ?>" style="width: 200px;">
                 </label>
             </div>
         </div>

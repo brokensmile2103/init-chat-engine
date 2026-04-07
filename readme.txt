@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.3.3
+Stable tag: 1.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.4 – April 7, 2026 =
+- Fixed bulk delete and single message delete not working due to stale object cache
+- Added `init_plugin_suite_chat_engine_clear_message_cache()` to properly invalidate message list, total count, and stats cache after every delete action
+- Fixed nonce variable conflict between single action handler and cleanup handler that could cause cleanup verification to fail silently
+- Added Screen Options support for configurable messages per page (default: 20, range: 5–200)
+- Per-page preference is saved per user via user meta — does not affect other admins
+- Replaced WordPress screen option API with direct POST handler for reliable save behavior
+- No changes to database schema, REST API, or existing chat flow
 
 = 1.3.3 – March 30, 2026 =
 - Added expand/collapse support for pinned message content in banner

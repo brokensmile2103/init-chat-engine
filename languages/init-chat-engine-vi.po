@@ -633,3 +633,36 @@ msgstr "Lỗi kết nối khi ghim tin nhắn."
 
 msgid "Connection error while unpinning."
 msgstr "Lỗi kết nối khi bỏ ghim."
+
+msgid "%d messages deleted successfully."
+msgstr "Đã xóa thành công %d tin nhắn."
+
+msgid "Select bulk action"
+msgstr "Chọn hành động hàng loạt"
+
+msgid "Bulk Actions"
+msgstr "Hành động hàng loạt"
+
+msgid "Delete Selected"
+msgstr "Xóa đã chọn"
+
+msgid "Ban Selected Users"
+msgstr "Cấm người dùng đã chọn"
+
+msgid "Apply"
+msgstr "Áp dụng"
+
+msgid "Selected:"
+msgstr "Đã chọn:"
+
+msgid "Ban Duration (hours, 0 = permanent):"
+msgstr "Thời gian cấm (giờ, 0 = vĩnh viễn):"
+
+msgid "Reason:"
+msgstr "Lý do:"
+
+msgid "Violation of chat rules"
+msgstr "Vi phạm quy tắc chat"
+
+msgid "Messages per page"
+msgstr "Số tin trên một trang"
