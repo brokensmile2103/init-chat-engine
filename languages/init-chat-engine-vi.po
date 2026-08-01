@@ -537,14 +537,20 @@ msgstr "Mất kết nối. Đang thử kết nối lại..."
 msgid "Connected"
 msgstr "Đã kết nối"
 
-msgid "minutes ago"
-msgstr "phút trước"
+msgid "minutes"
+msgstr "phút"
 
-msgid "hours ago"
-msgstr "giờ trước"
+msgid "hours"
+msgstr "giờ"
 
-msgid "days ago"
-msgstr "ngày trước"
+msgid "weeks"
+msgstr "tuần"
+
+msgid "months"
+msgstr "tháng"
+
+msgid "years"
+msgstr "năm"
 
 # Stats Shortcode
 msgid "You do not have permission to view detailed statistics."
@@ -657,9 +663,6 @@ msgstr "Đã chọn:"
 
 msgid "Ban Duration (hours, 0 = permanent):"
 msgstr "Thời gian cấm (giờ, 0 = vĩnh viễn):"
-
-msgid "Reason:"
-msgstr "Lý do:"
 
 msgid "Violation of chat rules"
 msgstr "Vi phạm quy tắc chat"

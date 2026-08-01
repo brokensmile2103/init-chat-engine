@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.3.5
+Stable tag: 1.3.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -25,7 +25,7 @@ GitHub repository: [https://github.com/brokensmile2103/init-chat-engine](https:/
 - No jQuery, no bloat – blazing fast
 - Fully embeddable via `[init_chatbox]` shortcode
 - Guest messaging support (optional)
-- Smart polling system (adaptive 3.5–10s based on activity)
+- Smart polling system (adaptive 3.5–10s based on activity, up to 20s when the chatbox is scrolled out of view)
 - Browser notifications when new messages arrive
 - Scroll-up to load history, scroll-down to auto-scroll
 - Optimistic sending & "new message" jump button
@@ -150,6 +150,12 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.6 – August 1, 2026 =
+- Enhancement: relative timestamps ("x minutes...") now also cover weeks, months, and years for older messages — previously capped at "x days"
+- Change: dropped the "ago" suffix from relative timestamps to keep the UI compact (e.g. "2 hours" instead of "2 hours ago"), matching the convention used by most modern social apps. Translators: the `minutes_ago` / `hours_ago` / `days_ago` JS i18n strings were renamed to `unit_minutes` / `unit_hours` / `unit_days` / `unit_weeks` / `unit_months` / `unit_years` — please update custom translations accordingly
+- Performance: polling now also accounts for whether the chatbox is actually scrolled into view (via `IntersectionObserver`), not just whether the browser tab itself is focused/visible. If the chatbox is off-screen elsewhere on a long page, polling backs off further (up to 20s) and resumes instantly once it's back in view
+- No changes to database schema or REST API response shape
 
 = 1.3.5 – August 1, 2026 =
 - Fix: timestamps ("x minutes ago") could get stuck on "now" indefinitely (or show hours-old immediately after posting) on any site whose timezone setting differs from UTC. Caused by `created_at_iso` being computed from a local-time string without converting to true GMT first — now uses `get_gmt_from_date()` for a correct absolute timestamp. Only affects the new client-side timestamp feature below; does not affect message content, delivery, or ordering

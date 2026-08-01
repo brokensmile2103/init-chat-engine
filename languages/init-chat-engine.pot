@@ -537,13 +537,19 @@ msgstr ""
 msgid "Connected"
 msgstr ""
 
-msgid "minutes ago"
+msgid "minutes"
 msgstr ""
 
-msgid "hours ago"
+msgid "hours"
 msgstr ""
 
-msgid "days ago"
+msgid "weeks"
+msgstr ""
+
+msgid "months"
+msgstr ""
+
+msgid "years"
 msgstr ""
 
 # Stats Shortcode
@@ -626,9 +632,6 @@ msgid "Selected:"
 msgstr ""
 
 msgid "Ban Duration (hours, 0 = permanent):"
-msgstr ""
-
-msgid "Reason:"
 msgstr ""
 
 msgid "Violation of chat rules"

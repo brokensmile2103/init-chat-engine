@@ -75,9 +75,13 @@ document.addEventListener('DOMContentLoaded', function () {
         interval: 3500,
         minInterval: 3500, // 3.5s - đủ nhanh cho cảm giác realtime, giảm ~40% request so với 2s
         maxInterval: 10000, // 10s khi tab background / không hoạt động
+        // NEW: Chatbox không nằm trong viewport (tab vẫn active, nhưng user cuộn qua
+        // chỗ khác của trang) => giãn polling xa hơn nữa so với maxInterval thông thường
+        viewportMaxInterval: 20000, // 20s khi chatbox ngoài viewport
         timer: null,
         isWindowFocused: true,
         isInputFocused: false,
+        isInViewport: true, // NEW: cập nhật bởi IntersectionObserver bên dưới
         consecutiveEmptyFetches: 0,
         consecutiveErrors: 0, // NEW: Track consecutive errors
         lastActivity: Date.now(),
@@ -630,6 +634,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (polling.consecutiveEmptyFetches > 0) {
                 newInterval += polling.consecutiveEmptyFetches * 300;
             }
+
+            // NEW: Chatbox ngoài viewport (trang vẫn active, không phải tab ẩn) => user
+            // gần như chắc chắn không đang nhìn chatbox, giãn xa hơn cả maxInterval thường,
+            // trừ khi đang gõ (isInputFocused đã return sớm ở nhánh trên nên không bị ảnh hưởng)
+            if (!polling.isInViewport) {
+                newInterval = Math.max(newInterval, polling.viewportMaxInterval);
+            }
         }
 
         // Network status adjustment
@@ -637,7 +648,12 @@ document.addEventListener('DOMContentLoaded', function () {
             newInterval = polling.maxInterval;
         }
 
-        return Math.max(polling.minInterval, Math.min(polling.maxInterval, Math.round(newInterval)));
+        // Trần interval động: cao hơn khi chatbox ngoài viewport, ngược lại giữ nguyên maxInterval
+        const effectiveMaxInterval = (!polling.isInViewport && polling.consecutiveErrors === 0)
+            ? Math.max(polling.maxInterval, polling.viewportMaxInterval)
+            : polling.maxInterval;
+
+        return Math.max(polling.minInterval, Math.min(effectiveMaxInterval, Math.round(newInterval)));
     }
 
     function updatePollingInterval() {
@@ -744,6 +760,17 @@ document.addEventListener('DOMContentLoaded', function () {
     // nhắn gần nhất + tính human_time_diff() MỖI LẦN poll (mỗi 3.5-10s/client), dù
     // tuyệt đại đa số các lần đó không có gì thay đổi để hiển thị. Giờ tính thẳng ở
     // client dựa vào data-timestamp (ISO) đã có sẵn trên DOM, không tốn thêm request.
+    // NOTE (1.3.6): Bỏ hậu tố "ago"/"trước" để hiển thị gọn hơn trên giao diện
+    // (giống Facebook: "2 giờ" thay vì "2 giờ trước"). Đồng thời bổ sung thêm
+    // các mốc tuần / tháng / năm cho tin nhắn cũ, trước đây chỉ tính tới "ngày".
+    const RELATIVE_TIME_THRESHOLDS = [
+        { limit: 3600, divisor: 60, unit: 'unit_minutes', fallback: 'minutes' },
+        { limit: 86400, divisor: 3600, unit: 'unit_hours', fallback: 'hours' },
+        { limit: 604800, divisor: 86400, unit: 'unit_days', fallback: 'days' },       // < 7 ngày
+        { limit: 2592000, divisor: 604800, unit: 'unit_weeks', fallback: 'weeks' },   // < 30 ngày
+        { limit: 31536000, divisor: 2592000, unit: 'unit_months', fallback: 'months' }, // < 365 ngày
+    ];
+
     function formatRelativeTime(isoString) {
         const then = new Date(isoString).getTime();
         if (isNaN(then)) return '';
@@ -753,13 +780,17 @@ document.addEventListener('DOMContentLoaded', function () {
         if (diffSec < 60) {
             return config.i18n.now || 'now';
         }
-        if (diffSec < 3600) {
-            return `${Math.floor(diffSec / 60)} ${config.i18n.minutes_ago || 'minutes ago'}`;
+
+        for (const step of RELATIVE_TIME_THRESHOLDS) {
+            if (diffSec < step.limit) {
+                const value = Math.floor(diffSec / step.divisor);
+                return `${value} ${config.i18n[step.unit] || step.fallback}`;
+            }
         }
-        if (diffSec < 86400) {
-            return `${Math.floor(diffSec / 3600)} ${config.i18n.hours_ago || 'hours ago'}`;
-        }
-        return `${Math.floor(diffSec / 86400)} ${config.i18n.days_ago || 'days ago'}`;
+
+        // >= 1 năm
+        const years = Math.floor(diffSec / 31536000);
+        return `${years} ${config.i18n.unit_years || 'years'}`;
     }
 
     function refreshVisibleTimestamps() {
@@ -1226,6 +1257,28 @@ document.addEventListener('DOMContentLoaded', function () {
                 updatePollingInterval();
             }
         });
+    }
+
+    // NEW: Viewport visibility (IntersectionObserver) - chatbox có thể nằm ở cuối trang
+    // dài, tab vẫn active/focus nhưng user đang đọc chỗ khác => vẫn nên giãn polling xa
+    // hơn thay vì chỉ dựa vào document.hidden (vốn chỉ biết tab ẩn/hiện, không biết vị
+    // trí cuộn trang)
+    if ('IntersectionObserver' in window && root) {
+        const chatboxViewportObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                polling.isInViewport = entry.isIntersecting;
+            });
+
+            if (polling.isInViewport) {
+                recordActivity();
+                // Fetch ngay khi chatbox vừa xuất hiện lại trong viewport, tránh cảm giác lag
+                setTimeout(fetchNewMessages, 200);
+            } else {
+                updatePollingInterval();
+            }
+        }, { threshold: 0 });
+
+        chatboxViewportObserver.observe(root);
     }
 
     // Input focus events
