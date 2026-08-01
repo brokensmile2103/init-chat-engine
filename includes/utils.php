@@ -70,20 +70,37 @@ function init_plugin_suite_chat_engine_check_account_age_requirement() {
  * Clear all message-related cache
  */
 function init_plugin_suite_chat_engine_clear_message_cache() {
-    global $wpdb;
-
-    // Xóa toàn bộ keys trong group (Redis/Memcached)
-    wp_cache_flush_group( 'init_chat_engine' );
-
-    // Fallback: xóa thủ công các cache key phổ biến
+    // 1. Xóa thủ công cache phân trang tin nhắn (group '')
     for ( $page = 1; $page <= 10; $page++ ) {
-        wp_cache_delete( 'init_chat_messages_' . md5( '' . $page ), '' );
-        wp_cache_delete( 'init_chat_total_messages_' . md5( '' ), '' );
+        wp_cache_delete( 'init_chat_messages_' . md5( (string) $page ), '' );
     }
 
-    // Xóa cache stats
-    wp_cache_delete( 'init_chat_stats_' . current_time( 'Y-m-d' ), '' );
-    wp_cache_delete( 'init_chat_daily_stats_' . current_time( 'Y-m-d' ), '' );
-    wp_cache_delete( 'init_chat_top_users_' . current_time( 'Y-m-d' ), '' );
+    // Đưa ra ngoài vòng lặp để chỉ xóa đúng 1 lần, đỡ spam Object Cache 10 lần bro nhé
+    wp_cache_delete( 'init_chat_total_messages_' . md5( '' ), '' );
+
+    // 2. Xóa các cache thống kê (group '')
+    $current_date = current_time( 'Y-m-d' );
+    wp_cache_delete( 'init_chat_stats_' . $current_date, '' );
+    wp_cache_delete( 'init_chat_daily_stats_' . $current_date, '' );
+    wp_cache_delete( 'init_chat_top_users_' . $current_date, '' );
     wp_cache_delete( 'init_chat_db_size', '' );
+
+    // 3. Admin đổi dữ liệu tin nhắn thì cache phía frontend (REST /messages) cũng
+    // phải xóa theo, không thì chat ngoài trang vẫn hiển thị tin đã bị admin xóa.
+    init_plugin_suite_chat_engine_clear_frontend_message_cache();
+}
+
+/**
+ * Xóa cache tin nhắn phía frontend (REST GET /messages - group 'init_chat_engine').
+ * Gọi hàm này ở MỌI nơi làm thay đổi danh sách tin nhắn hiển thị cho người dùng:
+ * gửi tin mới, xóa/ẩn tin (single/bulk/moderate qua REST), xóa toàn bộ, hoặc cron
+ * dọn tin cũ. Tách riêng khỏi init_plugin_suite_chat_engine_clear_message_cache()
+ * (cache riêng cho trang quản trị) vì 2 nhóm cache có key/group khác nhau, nhưng
+ * hàm đó vẫn gọi lại hàm này để đảm bảo đổi ở admin thì frontend cũng cập nhật theo.
+ */
+function init_plugin_suite_chat_engine_clear_frontend_message_cache() {
+    $cache_group = 'init_chat_engine';
+
+    wp_cache_delete( 'frontend_latest_id', $cache_group );
+    wp_cache_delete( 'frontend_latest_messages', $cache_group );
 }

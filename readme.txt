@@ -2,9 +2,9 @@
 Contributors: brokensmile.2103
 Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.3.4
+Stable tag: 1.3.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,19 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.5 – August 1, 2026 =
+- Fix: timestamps ("x minutes ago") could get stuck on "now" indefinitely (or show hours-old immediately after posting) on any site whose timezone setting differs from UTC. Caused by `created_at_iso` being computed from a local-time string without converting to true GMT first — now uses `get_gmt_from_date()` for a correct absolute timestamp. Only affects the new client-side timestamp feature below; does not affect message content, delivery, or ordering
+- Performance: removed a redundant DB query that ran on every single poll request to refresh message timestamps (previously fetched + recomputed 50 rows every 3.5–10s per connected client)
+- Performance: relative timestamps ("x minutes ago") are now computed client-side and refreshed locally every 60s, no extra network round-trip
+- Performance: throttled the `last_activity` stat write so it's persisted at most once per minute instead of on every poll request, reducing DB write load on busy sites
+- Performance: polling now pauses entirely (instead of just backing off) after 10 minutes of inactivity on a hidden/unfocused tab, and resumes instantly on focus
+- Performance: replaced the single-column `idx_is_deleted` index with a composite `(is_deleted, id)` index on the messages table — the composite index already covers every query the old one did, so keeping both only added write overhead. Existing sites are migrated automatically (old index dropped, new one added); new installs get the new index directly
+- Performance: added object caching (`wp_cache_*`) to `GET /messages` — polling requests with no new messages now skip the database entirely, and initial page loads share a single cached query across all visitors instead of querying per visitor. Effectiveness depends on your host providing a persistent object cache (see FAQ)
+- Fix: `TRUNCATE`-based "delete all messages" and the automatic daily cleanup cron did not invalidate any cache before this release, so admin-side stats/message list and (now) the frontend cache could show stale data after those actions. Both now invalidate all related caches
+- Fix: the REST `/admin/moderate` delete action did not invalidate any cache before this release
+- Tuned adaptive polling range to 3.5–10s (previously 2–12s) to match documented behavior and reduce request volume
+- No changes to REST API response shape used by third-party integrations, except the internal `updated_messages` field (undocumented, poll-only) has been removed
 
 = 1.3.4 – April 7, 2026 =
 - Fixed bulk delete and single message delete not working due to stale object cache

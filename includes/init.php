@@ -2,15 +2,16 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Plugin activation hook – create custom table with indexes
+ * SQL định nghĩa bảng messages – dùng chung cho activate() (site mới)
+ * và migration schema-only (site cũ), để tránh lệch định nghĩa giữa 2 nơi.
  */
-function init_plugin_suite_chat_engine_activate() {
+function init_plugin_suite_chat_engine_get_messages_table_sql() {
     global $wpdb;
-    
-    $table_name = $wpdb->prefix . 'init_chatbox_msgs';
+
+    $table_name      = $wpdb->prefix . 'init_chatbox_msgs';
     $charset_collate = $wpdb->get_charset_collate();
-    
-    $sql = "CREATE TABLE $table_name (
+
+    return "CREATE TABLE $table_name (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT(20) NULL,
         display_name VARCHAR(100) NOT NULL,
@@ -22,11 +23,20 @@ function init_plugin_suite_chat_engine_activate() {
         PRIMARY KEY (id),
         KEY idx_user_id (user_id),
         KEY idx_created_at (created_at),
-        KEY idx_is_deleted (is_deleted)
+        KEY idx_deleted_id (is_deleted, id)
     ) $charset_collate;";
-    
+}
+
+/**
+ * Plugin activation hook – create custom table with indexes
+ */
+function init_plugin_suite_chat_engine_activate() {
+    global $wpdb;
+
+    $charset_collate = $wpdb->get_charset_collate();
+
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-    dbDelta( $sql );
+    dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
     
     // Create options table for storing chat statistics
     $stats_table = $wpdb->prefix . 'init_chatbox_stats';
@@ -66,7 +76,7 @@ function init_plugin_suite_chat_engine_activate() {
     init_plugin_suite_chat_engine_init_default_stats();
     
     // Set plugin version
-    update_option( 'init_plugin_suite_chat_engine_db_version', '1.1.0' );
+    update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
     
     // Schedule cleanup event
     if ( ! wp_next_scheduled( 'init_chat_engine_cleanup_messages' ) ) {
@@ -116,10 +126,51 @@ function init_plugin_suite_chat_engine_init_default_stats() {
  */
 function init_plugin_suite_chat_engine_check_db_upgrade() {
     $current_version = get_option( 'init_plugin_suite_chat_engine_db_version', '1.0.0' );
-    
+
     if ( version_compare( $current_version, '1.1.0', '<' ) ) {
         init_plugin_suite_chat_engine_activate();
     }
+
+    // Migration 1.3.5: thêm composite index (is_deleted, id) và xóa idx_is_deleted
+    // đơn lẻ (đã bị composite index bao phủ hoàn toàn theo quy tắc leftmost-prefix
+    // của MySQL/InnoDB, giữ lại chỉ tốn thêm dung lượng + chậm ghi mỗi INSERT/UPDATE).
+    // Gộp chung 1 bước duy nhất vì bản 1.2.0 (bản nháp thêm idx_deleted_id ban đầu)
+    // chưa từng release cho site nào, không cần giữ làm mốc trung gian.
+    // Cố tình KHÔNG gọi lại activate() ở đây vì activate() sẽ reset total_messages,
+    // total_users... về 0 qua init_default_stats() – gây mất số liệu của site đang chạy.
+    if ( version_compare( $current_version, '1.3.5', '<' ) ) {
+        init_plugin_suite_chat_engine_migrate_db_1_3_5();
+    }
+}
+
+/**
+ * Migration 1.3.5 – schema-only, an toàn để chạy nhiều lần:
+ * 1. Thêm composite index (is_deleted, id) qua dbDelta (dbDelta tự bỏ qua nếu đã có).
+ * 2. Xóa index idx_is_deleted cũ nếu còn tồn tại (dbDelta KHÔNG tự xóa index thừa,
+ *    nên phải DROP INDEX thủ công, có kiểm tra tồn tại trước để tránh lỗi khi
+ *    chạy lại hoặc trên site đã được migrate).
+ * Không đụng tới bảng stats hay lịch cron.
+ */
+function init_plugin_suite_chat_engine_migrate_db_1_3_5() {
+    global $wpdb;
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
+
+    $table_name = esc_sql( $wpdb->prefix . 'init_chatbox_msgs' );
+
+    // Tên bảng là identifier, không thể bind qua $wpdb->prepare() %s (sẽ bị quote
+    // thành chuỗi literal). $table_name đã qua esc_sql() và chỉ ghép từ $wpdb->prefix
+    // (giá trị nội bộ, không phải input người dùng) nên an toàn để interpolate.
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+    $old_index_exists = $wpdb->get_var( "SHOW INDEX FROM `{$table_name}` WHERE Key_name = 'idx_is_deleted'" );
+
+    if ( $old_index_exists ) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+        $wpdb->query( "ALTER TABLE `{$table_name}` DROP INDEX idx_is_deleted" );
+    }
+
+    update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
 }
 
 /**
@@ -133,11 +184,12 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
     $cleanup_days = isset( $options['cleanup_days'] ) ? (int) $options['cleanup_days'] : 30;
     
     $table_name = $wpdb->prefix . 'init_chatbox_msgs';
-    
+    $did_change = false;
+
     // Clean up old deleted messages (older than cleanup_days)
     if ( $cleanup_days > 0 ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->query( 
+        $deleted_rows = $wpdb->query( 
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->prefix}init_chatbox_msgs 
@@ -146,6 +198,10 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
                 $cleanup_days
             )
         );
+
+        if ( $deleted_rows ) {
+            $did_change = true;
+        }
     }
     
     // Maintain message limit
@@ -168,6 +224,8 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
                 $delete_limit
             )
         );
+
+        $did_change = true;
     }
     
     // Clean up expired bans
@@ -175,6 +233,13 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
     
     // Update cleanup stats
     init_plugin_suite_chat_engine_update_stat( 'last_cleanup', current_time( 'mysql' ) );
+
+    // Cleanup có xóa/ẩn tin thật sự -> clear cache liên quan. Đặt ở đây (thay vì chỉ
+    // ở nơi gọi thủ công từ admin) để cron tự động chạy hàng ngày cũng được cover,
+    // không chỉ khi admin bấm nút "Cleanup" thủ công.
+    if ( $did_change ) {
+        init_plugin_suite_chat_engine_clear_message_cache();
+    }
 }
 
 /**
@@ -195,6 +260,23 @@ function init_plugin_suite_chat_engine_update_stat( $key, $value ) {
         ],
         [ '%s', '%s', '%s' ]
     );
+}
+
+/**
+ * Ghi nhận "last_activity" nhưng có throttle để tránh ghi DB (REPLACE INTO)
+ * trên mỗi request GET /messages. Chat được poll mỗi vài giây bởi mọi client
+ * đang mở tab, nên nếu ghi thẳng mỗi lần sẽ tạo áp lực ghi DB rất lớn ở site
+ * đông người dùng. Ở đây chỉ cho phép ghi thật tối đa 1 lần / phút.
+ */
+function init_plugin_suite_chat_engine_touch_last_activity() {
+    $throttle_key = 'init_chat_engine_last_activity_throttle';
+
+    if ( false !== get_transient( $throttle_key ) ) {
+        return;
+    }
+
+    init_plugin_suite_chat_engine_update_stat( 'last_activity', current_time( 'mysql' ) );
+    set_transient( $throttle_key, 1, MINUTE_IN_SECONDS );
 }
 
 /**
@@ -666,6 +748,12 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
         // Commit transaction
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->query( 'COMMIT' );
+
+        // Toàn bộ tin nhắn đã bị xóa sạch -> phải xóa cache liên quan, không thì
+        // frontend vẫn hiển thị tin cũ (đã cache) cho tới khi hết TTL. Xóa cả cache
+        // pinned_message vì tin đang ghim (nếu có) giờ cũng không còn tồn tại nữa.
+        init_plugin_suite_chat_engine_clear_message_cache();
+        wp_cache_delete( 'pinned_message', 'init_chat_engine' );
 
         // Ghi log (nếu WP_DEBUG bật)
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {

@@ -198,41 +198,60 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
         $limit = 100;
     }
 
+    $cache_group = 'init_chat_engine';
+
     // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-    $messages         = [];
-    $updated_messages = [];
+    $messages = [];
 
     // Build query dựa theo tham số
     if ( $after_id > 0 ) {
-        // Lấy message mới hơn (realtime updates)
-        $results = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, user_id, display_name, message, created_at 
-                 FROM {$table} 
-                 WHERE id > %d AND is_deleted = 0
-                 ORDER BY id ASC 
-                 LIMIT %d",
-                $after_id, $limit
-            ),
-            ARRAY_A
-        );
-        $messages = $results;
+        // Polling realtime: đại đa số các lần poll KHÔNG có tin nhắn mới (chat không
+        // sôi động liên tục 24/7). Cache 1 giá trị "ID tin nhắn mới nhất hiện có" -
+        // nếu client đã có ID này rồi (after_id >= cache) thì trả rỗng ngay, KHÔNG
+        // chạm DB. Cache được xóa chủ động mỗi khi có tin mới/bị xóa (xem
+        // init_plugin_suite_chat_engine_clear_frontend_message_cache()), TTL chỉ là
+        // lưới an toàn dự phòng.
+        $cached_latest_id = wp_cache_get( 'frontend_latest_id', $cache_group );
 
-        // Lấy 50 message mới nhất để refresh timestamp
-        $recent_messages = $wpdb->get_results(
-            // $limit cố định 50 để không phụ thuộc client
-            "SELECT id, user_id, display_name, message, created_at 
-             FROM {$table} 
-             WHERE is_deleted = 0
-             ORDER BY id DESC 
-             LIMIT 50",
-            ARRAY_A
-        );
-        $updated_messages = $recent_messages;
+        if ( false !== $cached_latest_id && $after_id >= (int) $cached_latest_id ) {
+            $messages = [];
+        } else {
+            // Lấy message mới hơn (realtime updates)
+            $results = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT id, user_id, display_name, message, created_at 
+                     FROM {$table} 
+                     WHERE id > %d AND is_deleted = 0
+                     ORDER BY id ASC 
+                     LIMIT %d",
+                    $after_id, $limit
+                ),
+                ARRAY_A
+            );
+            $messages = $results;
+
+            if ( ! empty( $messages ) ) {
+                // Có tin mới thật sự -> cache lại ID cao nhất vừa xác nhận được
+                $newest_id = (int) end( $messages )['id'];
+                wp_cache_set( 'frontend_latest_id', $newest_id, $cache_group, 2 * MINUTE_IN_SECONDS );
+            } else {
+                // Không có gì sau $after_id => xác nhận ID mới nhất <= $after_id,
+                // an toàn để cache lại mốc này cho các lần poll sau (của mọi client).
+                $known_max = max( $after_id, (int) $cached_latest_id );
+                wp_cache_set( 'frontend_latest_id', $known_max, $cache_group, 2 * MINUTE_IN_SECONDS );
+            }
+        }
+
+        // Lưu ý: KHÔNG query thêm 50 tin gần nhất để "refresh timestamp" ở đây nữa.
+        // Trước đây mỗi lần poll (mỗi 2-12s/client) đều chạy thêm 1 query + tính
+        // human_time_diff() cho 50 dòng dù không có gì thay đổi. Hiển thị dạng
+        // "x phút trước" giờ được tính trực tiếp ở client (chat.js) dựa vào
+        // created_at_iso đã trả sẵn, không cần round-trip lên server.
 
     } elseif ( $before_id > 0 ) {
-        // Phân trang lùi (older messages)
+        // Phân trang lùi (older messages) - mỗi client dừng cuộn ở vị trí khác nhau
+        // nên tỉ lệ cache hit sẽ thấp, cố tình không cache nhánh này.
         $results = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT id, user_id, display_name, message, created_at 
@@ -247,19 +266,32 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
         $messages = $results;
 
     } else {
-        // Lần đầu: lấy mới nhất (DESC), FE tự đảo
-        $results = $wpdb->get_results(
-            $wpdb->prepare(
-                "SELECT id, user_id, display_name, message, created_at 
-                 FROM {$table} 
-                 WHERE is_deleted = 0
-                 ORDER BY id DESC 
-                 LIMIT %d",
-                $limit
-            ),
-            ARRAY_A
-        );
-        $messages = $results;
+        // Lần đầu tải trang: MỌI client mới vào đều gọi đúng 1 dạng query giống hệt
+        // nhau (is_deleted=0 ORDER BY id DESC), chỉ khác $limit (JS dùng limit=15 cho
+        // tải trang, limit=1 cho check pinned message ban đầu). Cache chung 1 lần 50
+        // dòng mới nhất (mức trần limit cho phép ở REST arg), rồi cắt theo $limit thực
+        // tế từng request bằng array_slice - không cần query lại DB cho từng lượt tải
+        // trang mới, dù có bao nhiêu người cùng vào chat một lúc.
+        $cached_latest = wp_cache_get( 'frontend_latest_messages', $cache_group );
+
+        if ( false === $cached_latest ) {
+            $cached_latest = $wpdb->get_results(
+                $wpdb->prepare(
+                    "SELECT id, user_id, display_name, message, created_at 
+                     FROM {$table} 
+                     WHERE is_deleted = 0
+                     ORDER BY id DESC 
+                     LIMIT %d",
+                    50
+                ),
+                ARRAY_A
+            );
+            // TTL ngắn chỉ làm lưới an toàn dự phòng - chủ yếu dựa vào việc chủ động
+            // xóa cache mỗi khi có tin mới/bị xóa.
+            wp_cache_set( 'frontend_latest_messages', $cached_latest, $cache_group, 30 );
+        }
+
+        $messages = array_slice( $cached_latest, 0, $limit );
     }
 
     // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -296,10 +328,24 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
     // Hàm format 1 row message
     $format_message = function( &$row ) use ( $show_avatars, $get_profile_url ) {
         // Time
-        $created_timestamp       = strtotime( $row['created_at'] );
-        $row['created_at_human'] = human_time_diff( $created_timestamp, current_time( 'timestamp' ) );
-        $row['created_at_iso']   = gmdate( 'c', $created_timestamp );
-        $row['created_timestamp']= $created_timestamp;
+        // Lưu ý quan trọng: $row['created_at'] được lưu bằng current_time('mysql')
+        // (giờ ĐỊA PHƯƠNG theo timezone site, KHÔNG phải UTC). WordPress ép PHP
+        // timezone mặc định về UTC, nên strtotime() trên chuỗi này sẽ hiểu NHẦM giờ
+        // địa phương thành giờ UTC.
+        //
+        // human_time_diff() dưới đây vẫn ĐÚNG dù dùng $created_timestamp "lệch", vì
+        // current_time('timestamp') cũng bị lệch giống hệt - lấy hiệu số nên sai số
+        // tự triệt tiêu. Nhưng created_at_iso thì KHÔNG được lấy hiệu số ở server -
+        // client (chat.js) parse thẳng thành mốc UTC tuyệt đối rồi so với Date.now()
+        // thật, nên phải quy đổi đúng qua GMT bằng get_gmt_from_date() trước, nếu
+        // không tin nhắn sẽ luôn hiện "vừa xong" (site múi giờ dương) hoặc "X giờ
+        // trước" ngay khi vừa gửi (site múi giờ âm), tùy UTC offset của site.
+        $created_timestamp        = strtotime( $row['created_at'] );
+        $row['created_at_human']  = human_time_diff( $created_timestamp, current_time( 'timestamp' ) );
+
+        $created_timestamp_utc    = strtotime( get_gmt_from_date( $row['created_at'] ) );
+        $row['created_at_iso']    = gmdate( 'c', $created_timestamp_utc );
+        $row['created_timestamp'] = $created_timestamp_utc;
 
         // Avatar
         $row['avatar_url'] = '';
@@ -346,14 +392,8 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
     }
     unset( $row );
 
-    // Format updated messages (refresh timestamp)
-    foreach ( $updated_messages as &$row ) {
-        $format_message( $row );
-    }
-    unset( $row );
-
-    // Update stats
-    init_plugin_suite_chat_engine_update_stat( 'last_activity', current_time( 'mysql' ) );
+    // Update stats (có throttle, tối đa ghi DB 1 lần/phút - xem init.php)
+    init_plugin_suite_chat_engine_touch_last_activity();
 
     $response = [
         'success'        => true,
@@ -362,11 +402,6 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
         'has_more'       => count( $messages ) === $limit,
         'pinned_message' => init_plugin_suite_chat_engine_get_pinned_message(),
     ];
-
-    // Chỉ trả updated_messages khi có after_id (polling realtime)
-    if ( $after_id > 0 && ! empty( $updated_messages ) ) {
-        $response['updated_messages'] = $updated_messages;
-    }
 
     return rest_ensure_response( $response );
 }
@@ -433,6 +468,10 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
 
     $message_id = $wpdb->insert_id;
 
+    // Có tin mới -> xóa cache "tin mới nhất" phía frontend ngay, đảm bảo mọi client
+    // (kể cả người vừa mở tab) thấy tin này ngay lần poll/tải trang kế tiếp.
+    init_plugin_suite_chat_engine_clear_frontend_message_cache();
+
     do_action( 'init_plugin_suite_chat_engine_message_saved', $message_id, $message, $user_id, $display_name );
 
     // Update statistics
@@ -460,6 +499,12 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
                 $delete_limit
             )
         );
+
+        // Trim tin cũ nhất khi vượt max_messages - thường không đụng tới cache "tin
+        // mới nhất" (đã clear ở trên rồi), nhưng clear thêm lần nữa cho chắc để tránh
+        // trường hợp hiếm: 1 request GET khác chen vào đúng lúc giữa insert và trim,
+        // cache lại dữ liệu trước khi trim.
+        init_plugin_suite_chat_engine_clear_message_cache();
     }
 
     // Return success with message data
@@ -613,6 +658,10 @@ function init_plugin_suite_chat_engine_moderate_message( WP_REST_Request $reques
                 [ '%d' ],
                 [ '%d' ]
             );
+
+            // Tin vừa bị ẩn khỏi danh sách hiển thị -> xóa cache liên quan (cascade
+            // sang cả cache frontend, xem init_plugin_suite_chat_engine_clear_message_cache()).
+            init_plugin_suite_chat_engine_clear_message_cache();
             break;
             
         case 'ban_user':

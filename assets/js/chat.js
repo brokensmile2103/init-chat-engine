@@ -72,9 +72,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Enhanced polling system with better error handling
     let polling = {
-        interval: 2000,
-        minInterval: 2000,
-        maxInterval: 12000, // Increased max interval for poor connections
+        interval: 3500,
+        minInterval: 3500, // 3.5s - đủ nhanh cho cảm giác realtime, giảm ~40% request so với 2s
+        maxInterval: 10000, // 10s khi tab background / không hoạt động
         timer: null,
         isWindowFocused: true,
         isInputFocused: false,
@@ -83,7 +83,10 @@ document.addEventListener('DOMContentLoaded', function () {
         lastActivity: Date.now(),
         lastMessageTime: Date.now(),
         backoffMultiplier: 1.5, // NEW: Exponential backoff
-        isOnline: navigator.onLine // NEW: Online status
+        isOnline: navigator.onLine, // NEW: Online status
+        // NEW: Tạm dừng hẳn polling (không chỉ giãn interval) khi tab ẩn quá lâu
+        isPaused: false,
+        pauseAfter: 10 * 60 * 1000 // 10 phút không hoạt động + tab ẩn => dừng poll
     };
 
     // Title notification system
@@ -638,14 +641,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updatePollingInterval() {
-        const newInterval = calculateOptimalInterval();
-        
-        if (newInterval !== polling.interval) {
-            polling.interval = newInterval;
-            
-            if (polling.timer) {
-                clearInterval(polling.timer);
+        const idleTime = Date.now() - polling.lastActivity;
+        const shouldPause = !polling.isWindowFocused && !polling.isInputFocused && idleTime > polling.pauseAfter;
+
+        if (shouldPause) {
+            if (!polling.isPaused) {
+                polling.isPaused = true;
+                if (polling.timer) {
+                    clearInterval(polling.timer);
+                    polling.timer = null;
+                }
+                console.debug('Polling paused after', Math.round(idleTime / 1000), 's inactivity');
             }
+            return;
+        }
+
+        const wasPaused = polling.isPaused;
+        polling.isPaused = false;
+
+        const newInterval = calculateOptimalInterval();
+
+        if (wasPaused || newInterval !== polling.interval || !polling.timer) {
+            polling.interval = newInterval;
             startPolling();
         }
     }
@@ -686,8 +703,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const avatarHTML = createAvatarHTML(msg);
         const displayName = `<span class="init-chatbox-author">${escapeHTML(msg.display_name)}</span>`;
+        const initialTimeText = msg.created_at_iso
+            ? formatRelativeTime(msg.created_at_iso)
+            : (msg.created_at_human || msg.created_at);
         const timestamp = config.showTimestamps ? 
-            `<span class="init-chatbox-meta-time" data-timestamp="${msg.created_at}">${escapeHTML(msg.created_at_human || msg.created_at)}</span>` : '';
+            `<span class="init-chatbox-meta-time" data-timestamp="${escapeHTML(msg.created_at_iso || msg.created_at)}">${escapeHTML(initialTimeText)}</span>` : '';
         const messageText = `<div class="init-chatbox-text">${formatMessageText(msg.message)}</div>`;
 
         div.innerHTML = `
@@ -719,46 +739,49 @@ document.addEventListener('DOMContentLoaded', function () {
         return div;
     }
 
-    // NEW: Update existing message timestamps
-    function updateMessageTimestamps(messages) {
-        if (!config.showTimestamps || !messages || messages.length === 0) return;
-        
-        let updatedCount = 0;
-        messages.forEach(msg => {
-            // Update cache
-            const cachedMsg = state.messageCache.get(msg.id);
-            if (cachedMsg && cachedMsg.created_at_human !== msg.created_at_human) {
-                state.messageCache.set(msg.id, msg);
-                
-                // Find existing message element and update it
-                const existingElement = messagesListEl.querySelector(`[data-message-id="${msg.id}"]`);
-                if (existingElement) {
-                    const timestampEl = existingElement.querySelector('.init-chatbox-meta-time');
-                    if (timestampEl && msg.created_at_human) {
-                        timestampEl.textContent = msg.created_at_human;
-                        timestampEl.setAttribute('data-timestamp', msg.created_at);
-                        updatedCount++;
-                    }
-                }
-            } else if (!cachedMsg) {
-                // New message, add to cache
-                state.messageCache.set(msg.id, msg);
-            }
-        });
-        
-        if (updatedCount > 0) {
-            console.debug(`Updated ${updatedCount} message timestamps`);
+    // ===== CLIENT-SIDE RELATIVE TIME =====
+    // Trước đây phần "x phút trước" được refresh bằng cách server query lại 50 tin
+    // nhắn gần nhất + tính human_time_diff() MỖI LẦN poll (mỗi 3.5-10s/client), dù
+    // tuyệt đại đa số các lần đó không có gì thay đổi để hiển thị. Giờ tính thẳng ở
+    // client dựa vào data-timestamp (ISO) đã có sẵn trên DOM, không tốn thêm request.
+    function formatRelativeTime(isoString) {
+        const then = new Date(isoString).getTime();
+        if (isNaN(then)) return '';
+
+        const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+
+        if (diffSec < 60) {
+            return config.i18n.now || 'now';
         }
+        if (diffSec < 3600) {
+            return `${Math.floor(diffSec / 60)} ${config.i18n.minutes_ago || 'minutes ago'}`;
+        }
+        if (diffSec < 86400) {
+            return `${Math.floor(diffSec / 3600)} ${config.i18n.hours_ago || 'hours ago'}`;
+        }
+        return `${Math.floor(diffSec / 86400)} ${config.i18n.days_ago || 'days ago'}`;
     }
+
+    function refreshVisibleTimestamps() {
+        if (!config.showTimestamps || !messagesListEl) return;
+
+        messagesListEl.querySelectorAll('.init-chatbox-meta-time[data-timestamp]').forEach(el => {
+            const iso = el.getAttribute('data-timestamp');
+            if (!iso) return;
+            const text = formatRelativeTime(iso);
+            if (text) el.textContent = text;
+        });
+    }
+
+    // Cập nhật mỗi 60s là đủ mượt cho hiển thị dạng "x phút trước", không cần dày hơn
+    setInterval(refreshVisibleTimestamps, 60000);
 
     function appendMessage(msg, shouldScroll = true) {
         if (!messagesListEl) return;
 
-        // Check if message already exists
+        // Check if message already exists (tránh duplicate khi poll trả trùng)
         const existingMessage = messagesListEl.querySelector(`[data-message-id="${msg.id}"]`);
         if (existingMessage) {
-            // Update existing message instead of duplicating
-            updateMessageTimestamps([msg]);
             return;
         }
 
@@ -902,14 +925,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     polling.lastMessageTime = Date.now();
                     
                     const wasAtBottom = isAtBottom();
-                    
-                    // First, try to update timestamps for ALL visible messages
-                    // This requires the API to return timestamp updates for existing messages
-                    if (data.updated_messages && data.updated_messages.length > 0) {
-                        updateMessageTimestamps(data.updated_messages);
-                    }
-                    
-                    // Then append new messages
+
+                    // Append new messages (timestamp "x phút trước" được refresh
+                    // định kỳ ở client bởi refreshVisibleTimestamps(), không cần server trả kèm)
                     data.messages.forEach(msg => {
                         appendMessage(msg, false);
                     });
@@ -931,11 +949,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 } else {
                     polling.consecutiveEmptyFetches++;
-                    
-                    // Even when no new messages, check for timestamp updates
-                    if (data.success && data.updated_messages && data.updated_messages.length > 0) {
-                        updateMessageTimestamps(data.updated_messages);
-                    }
                 }
                 
                 updatePollingInterval();
@@ -1186,6 +1199,11 @@ document.addEventListener('DOMContentLoaded', function () {
         polling.consecutiveErrors = Math.max(0, polling.consecutiveErrors - 1); // Reduce error count on focus
         stopTitleBlink();
         recordActivity();
+
+        // Nếu polling đang bị pause hẳn (do tab ẩn quá lâu), fetch ngay và resume interval
+        if (polling.isPaused) {
+            setTimeout(fetchNewMessages, 200);
+        }
     });
 
     window.addEventListener('blur', () => {
