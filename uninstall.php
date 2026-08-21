@@ -1,11 +1,18 @@
 <?php
-// Bảo mật: chỉ chạy khi gỡ plugin qua WP
+/**
+ * Uninstall routine: removes plugin options and the custom messages table.
+ *
+ * Bảo mật: chỉ chạy khi gỡ plugin qua WP.
+ *
+ * @package Init_Chat_Engine
+ */
+
 defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
-// Xóa options
+// Xóa options.
 delete_option( 'init_plugin_suite_chat_engine_settings' );
 
-// Xóa custom table
+// Xóa custom table.
 global $wpdb;
 $table = esc_sql( $wpdb->prefix . 'init_chatbox_msgs' );
 

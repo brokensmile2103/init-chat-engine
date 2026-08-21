@@ -1,4 +1,10 @@
 <?php
+/**
+ * Core setup: DB tables, ban handling, stats, pinned message helpers.
+ *
+ * @package Init_Chat_Engine
+ */
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -6,12 +12,12 @@ defined( 'ABSPATH' ) || exit;
  * và migration schema-only (site cũ), để tránh lệch định nghĩa giữa 2 nơi.
  */
 function init_plugin_suite_chat_engine_get_messages_table_sql() {
-    global $wpdb;
+	global $wpdb;
 
-    $table_name      = $wpdb->prefix . 'init_chatbox_msgs';
-    $charset_collate = $wpdb->get_charset_collate();
+	$table_name      = $wpdb->prefix . 'init_chatbox_msgs';
+	$charset_collate = $wpdb->get_charset_collate();
 
-    return "CREATE TABLE $table_name (
+	return "CREATE TABLE $table_name (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT(20) NULL,
         display_name VARCHAR(100) NOT NULL,
@@ -31,16 +37,16 @@ function init_plugin_suite_chat_engine_get_messages_table_sql() {
  * Plugin activation hook – create custom table with indexes
  */
 function init_plugin_suite_chat_engine_activate() {
-    global $wpdb;
+	global $wpdb;
 
-    $charset_collate = $wpdb->get_charset_collate();
+	$charset_collate = $wpdb->get_charset_collate();
 
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-    dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
-    
-    // Create options table for storing chat statistics
-    $stats_table = $wpdb->prefix . 'init_chatbox_stats';
-    $stats_sql = "CREATE TABLE $stats_table (
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+	dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
+
+	// Create options table for storing chat statistics.
+	$stats_table = $wpdb->prefix . 'init_chatbox_stats';
+	$stats_sql   = "CREATE TABLE $stats_table (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         stat_key VARCHAR(100) NOT NULL,
         stat_value LONGTEXT NULL,
@@ -48,12 +54,12 @@ function init_plugin_suite_chat_engine_activate() {
         PRIMARY KEY (id),
         UNIQUE KEY idx_stat_key (stat_key)
     ) $charset_collate;";
-    
-    dbDelta( $stats_sql );
-    
-    // Create banned users table
-    $banned_table = $wpdb->prefix . 'init_chatbox_banned';
-    $banned_sql = "CREATE TABLE $banned_table (
+
+	dbDelta( $stats_sql );
+
+	// Create banned users table.
+	$banned_table = $wpdb->prefix . 'init_chatbox_banned';
+	$banned_sql   = "CREATE TABLE $banned_table (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT(20) NULL,
         ip_address VARCHAR(45) NULL,
@@ -69,78 +75,78 @@ function init_plugin_suite_chat_engine_activate() {
         KEY idx_is_active (is_active),
         KEY idx_expires_at (expires_at)
     ) $charset_collate;";
-    
-    dbDelta( $banned_sql );
-    
-    // Initialize default stats
-    init_plugin_suite_chat_engine_init_default_stats();
-    
-    // Set plugin version
-    update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
-    
-    // Schedule cleanup event
-    if ( ! wp_next_scheduled( 'init_chat_engine_cleanup_messages' ) ) {
-        wp_schedule_event( time(), 'daily', 'init_chat_engine_cleanup_messages' );
-    }
+
+	dbDelta( $banned_sql );
+
+	// Initialize default stats.
+	init_plugin_suite_chat_engine_init_default_stats();
+
+	// Set plugin version.
+	update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
+
+	// Schedule cleanup event.
+	if ( ! wp_next_scheduled( 'init_chat_engine_cleanup_messages' ) ) {
+		wp_schedule_event( time(), 'daily', 'init_chat_engine_cleanup_messages' );
+	}
 }
 
 /**
  * Plugin deactivation hook
  */
 function init_plugin_suite_chat_engine_deactivate() {
-    // Clear scheduled events
-    wp_clear_scheduled_hook( 'init_chat_engine_cleanup_messages' );
+	// Clear scheduled events.
+	wp_clear_scheduled_hook( 'init_chat_engine_cleanup_messages' );
 }
 
 /**
  * Initialize default statistics
  */
 function init_plugin_suite_chat_engine_init_default_stats() {
-    global $wpdb;
-    
-    $stats_table = $wpdb->prefix . 'init_chatbox_stats';
-    $default_stats = [
-        'total_messages' => 0,
-        'total_users' => 0,
-        'messages_today' => 0,
-        'active_users_today' => 0,
-        'last_cleanup' => current_time( 'mysql' )
-    ];
-    
-    foreach ( $default_stats as $key => $value ) {
+	global $wpdb;
+
+	$stats_table   = $wpdb->prefix . 'init_chatbox_stats';
+	$default_stats = array(
+		'total_messages'     => 0,
+		'total_users'        => 0,
+		'messages_today'     => 0,
+		'active_users_today' => 0,
+		'last_cleanup'       => current_time( 'mysql' ),
+	);
+
+	foreach ( $default_stats as $key => $value ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->replace( 
-            $stats_table,
-            [
-                'stat_key' => $key,
-                'stat_value' => $value,
-                'updated_at' => current_time( 'mysql' )
-            ],
-            [ '%s', '%s', '%s' ]
-        );
-    }
+		$wpdb->replace(
+			$stats_table,
+			array(
+				'stat_key'   => $key,
+				'stat_value' => $value,
+				'updated_at' => current_time( 'mysql' ),
+			),
+			array( '%s', '%s', '%s' )
+		);
+	}
 }
 
 /**
  * Database upgrade check
  */
 function init_plugin_suite_chat_engine_check_db_upgrade() {
-    $current_version = get_option( 'init_plugin_suite_chat_engine_db_version', '1.0.0' );
+	$current_version = get_option( 'init_plugin_suite_chat_engine_db_version', '1.0.0' );
 
-    if ( version_compare( $current_version, '1.1.0', '<' ) ) {
-        init_plugin_suite_chat_engine_activate();
-    }
+	if ( version_compare( $current_version, '1.1.0', '<' ) ) {
+		init_plugin_suite_chat_engine_activate();
+	}
 
-    // Migration 1.3.5: thêm composite index (is_deleted, id) và xóa idx_is_deleted
-    // đơn lẻ (đã bị composite index bao phủ hoàn toàn theo quy tắc leftmost-prefix
-    // của MySQL/InnoDB, giữ lại chỉ tốn thêm dung lượng + chậm ghi mỗi INSERT/UPDATE).
-    // Gộp chung 1 bước duy nhất vì bản 1.2.0 (bản nháp thêm idx_deleted_id ban đầu)
-    // chưa từng release cho site nào, không cần giữ làm mốc trung gian.
-    // Cố tình KHÔNG gọi lại activate() ở đây vì activate() sẽ reset total_messages,
-    // total_users... về 0 qua init_default_stats() – gây mất số liệu của site đang chạy.
-    if ( version_compare( $current_version, '1.3.5', '<' ) ) {
-        init_plugin_suite_chat_engine_migrate_db_1_3_5();
-    }
+	// Migration 1.3.5: thêm composite index (is_deleted, id) và xóa idx_is_deleted
+	// đơn lẻ (đã bị composite index bao phủ hoàn toàn theo quy tắc leftmost-prefix
+	// của MySQL/InnoDB, giữ lại chỉ tốn thêm dung lượng + chậm ghi mỗi INSERT/UPDATE).
+	// Gộp chung 1 bước duy nhất vì bản 1.2.0 (bản nháp thêm idx_deleted_id ban đầu)
+	// chưa từng release cho site nào, không cần giữ làm mốc trung gian.
+	// Cố tình KHÔNG gọi lại activate() ở đây vì activate() sẽ reset total_messages,
+	// total_users... về 0 qua init_default_stats() – gây mất số liệu của site đang chạy.
+	if ( version_compare( $current_version, '1.3.5', '<' ) ) {
+		init_plugin_suite_chat_engine_migrate_db_1_3_5();
+	}
 }
 
 /**
@@ -152,114 +158,118 @@ function init_plugin_suite_chat_engine_check_db_upgrade() {
  * Không đụng tới bảng stats hay lịch cron.
  */
 function init_plugin_suite_chat_engine_migrate_db_1_3_5() {
-    global $wpdb;
+	global $wpdb;
 
-    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-    dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+	dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
 
-    $table_name = esc_sql( $wpdb->prefix . 'init_chatbox_msgs' );
+	$table_name = esc_sql( $wpdb->prefix . 'init_chatbox_msgs' );
 
-    // Tên bảng là identifier, không thể bind qua $wpdb->prepare() %s (sẽ bị quote
-    // thành chuỗi literal). $table_name đã qua esc_sql() và chỉ ghép từ $wpdb->prefix
-    // (giá trị nội bộ, không phải input người dùng) nên an toàn để interpolate.
+	// Tên bảng là identifier, không thể bind qua $wpdb->prepare() %s (sẽ bị quote
+	// thành chuỗi literal). $table_name đã qua esc_sql() và chỉ ghép từ $wpdb->prefix
+	// (giá trị nội bộ, không phải input người dùng) nên an toàn để interpolate.
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-    $old_index_exists = $wpdb->get_var( "SHOW INDEX FROM `{$table_name}` WHERE Key_name = 'idx_is_deleted'" );
+	$old_index_exists = $wpdb->get_var( "SHOW INDEX FROM `{$table_name}` WHERE Key_name = 'idx_is_deleted'" );
 
-    if ( $old_index_exists ) {
+	if ( $old_index_exists ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
-        $wpdb->query( "ALTER TABLE `{$table_name}` DROP INDEX idx_is_deleted" );
-    }
+		$wpdb->query( "ALTER TABLE `{$table_name}` DROP INDEX idx_is_deleted" );
+	}
 
-    update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
+	update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
 }
 
 /**
  * Scheduled cleanup of old messages
  */
 function init_plugin_suite_chat_engine_cleanup_messages() {
-    global $wpdb;
-    
-    $options = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, [] );
-    $max_messages = isset( $options['max_messages'] ) ? (int) $options['max_messages'] : 1000;
-    $cleanup_days = isset( $options['cleanup_days'] ) ? (int) $options['cleanup_days'] : 30;
-    
-    $table_name = $wpdb->prefix . 'init_chatbox_msgs';
-    $did_change = false;
+	global $wpdb;
 
-    // Clean up old deleted messages (older than cleanup_days)
-    if ( $cleanup_days > 0 ) {
+	$options      = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, array() );
+	$max_messages = isset( $options['max_messages'] ) ? (int) $options['max_messages'] : 1000;
+	$cleanup_days = isset( $options['cleanup_days'] ) ? (int) $options['cleanup_days'] : 30;
+
+	$table_name = $wpdb->prefix . 'init_chatbox_msgs';
+	$did_change = false;
+
+	// Clean up old deleted messages (older than cleanup_days).
+	if ( $cleanup_days > 0 ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $deleted_rows = $wpdb->query( 
+		$deleted_rows = $wpdb->query(
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-            $wpdb->prepare(
-                "DELETE FROM {$wpdb->prefix}init_chatbox_msgs 
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->prefix}init_chatbox_msgs 
                  WHERE is_deleted = 1 
                  AND created_at < DATE_SUB(NOW(), INTERVAL %d DAY)",
-                $cleanup_days
-            )
-        );
+				$cleanup_days
+			)
+		);
 
-        if ( $deleted_rows ) {
-            $did_change = true;
-        }
-    }
-    
-    // Maintain message limit
+		if ( $deleted_rows ) {
+			$did_change = true;
+		}
+	}
+
+	// Maintain message limit.
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $total_messages = $wpdb->get_var( 
-        "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0"
-    );
-    
-    if ( $total_messages > $max_messages ) {
-        $delete_limit = $total_messages - $max_messages;
+	$total_messages = $wpdb->get_var(
+		"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0"
+	);
+
+	if ( $total_messages > $max_messages ) {
+		$delete_limit = $total_messages - $max_messages;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->query( 
+		$wpdb->query(
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-            $wpdb->prepare(
-                "UPDATE {$wpdb->prefix}init_chatbox_msgs 
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}init_chatbox_msgs 
                  SET is_deleted = 1 
                  WHERE is_deleted = 0 
                  ORDER BY id ASC 
                  LIMIT %d",
-                $delete_limit
-            )
-        );
+				$delete_limit
+			)
+		);
 
-        $did_change = true;
-    }
-    
-    // Clean up expired bans
-    init_plugin_suite_chat_engine_cleanup_expired_bans();
-    
-    // Update cleanup stats
-    init_plugin_suite_chat_engine_update_stat( 'last_cleanup', current_time( 'mysql' ) );
+		$did_change = true;
+	}
 
-    // Cleanup có xóa/ẩn tin thật sự -> clear cache liên quan. Đặt ở đây (thay vì chỉ
-    // ở nơi gọi thủ công từ admin) để cron tự động chạy hàng ngày cũng được cover,
-    // không chỉ khi admin bấm nút "Cleanup" thủ công.
-    if ( $did_change ) {
-        init_plugin_suite_chat_engine_clear_message_cache();
-    }
+	// Clean up expired bans.
+	init_plugin_suite_chat_engine_cleanup_expired_bans();
+
+	// Update cleanup stats.
+	init_plugin_suite_chat_engine_update_stat( 'last_cleanup', current_time( 'mysql' ) );
+
+	// Cleanup có xóa/ẩn tin thật sự -> clear cache liên quan. Đặt ở đây (thay vì chỉ
+	// ở nơi gọi thủ công từ admin) để cron tự động chạy hàng ngày cũng được cover,
+	// không chỉ khi admin bấm nút "Cleanup" thủ công.
+	if ( $did_change ) {
+		init_plugin_suite_chat_engine_clear_message_cache();
+	}
 }
 
 /**
  * Update statistics
+ *
+ * @param string $key   Stat key to update.
+ * @param mixed  $value New value to store.
+ * @return void
  */
 function init_plugin_suite_chat_engine_update_stat( $key, $value ) {
-    global $wpdb;
-    
-    $stats_table = $wpdb->prefix . 'init_chatbox_stats';
-    
+	global $wpdb;
+
+	$stats_table = $wpdb->prefix . 'init_chatbox_stats';
+
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $wpdb->replace( 
-        $stats_table,
-        [
-            'stat_key' => $key,
-            'stat_value' => $value,
-            'updated_at' => current_time( 'mysql' )
-        ],
-        [ '%s', '%s', '%s' ]
-    );
+	$wpdb->replace(
+		$stats_table,
+		array(
+			'stat_key'   => $key,
+			'stat_value' => $value,
+			'updated_at' => current_time( 'mysql' ),
+		),
+		array( '%s', '%s', '%s' )
+	);
 }
 
 /**
@@ -269,431 +279,468 @@ function init_plugin_suite_chat_engine_update_stat( $key, $value ) {
  * đông người dùng. Ở đây chỉ cho phép ghi thật tối đa 1 lần / phút.
  */
 function init_plugin_suite_chat_engine_touch_last_activity() {
-    $throttle_key = 'init_chat_engine_last_activity_throttle';
+	$throttle_key = 'init_chat_engine_last_activity_throttle';
 
-    if ( false !== get_transient( $throttle_key ) ) {
-        return;
-    }
+	if ( false !== get_transient( $throttle_key ) ) {
+		return;
+	}
 
-    init_plugin_suite_chat_engine_update_stat( 'last_activity', current_time( 'mysql' ) );
-    set_transient( $throttle_key, 1, MINUTE_IN_SECONDS );
+	init_plugin_suite_chat_engine_update_stat( 'last_activity', current_time( 'mysql' ) );
+	set_transient( $throttle_key, 1, MINUTE_IN_SECONDS );
 }
 
 /**
  * Get statistics
+ *
+ * @param string $key           Stat key to fetch.
+ * @param mixed  $default_value Value returned when the stat isn't set yet.
+ * @return mixed
  */
-function init_plugin_suite_chat_engine_get_stat( $key, $default = null ) {
-    global $wpdb;
-    
-    $stats_table = $wpdb->prefix . 'init_chatbox_stats';
-    
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $value = $wpdb->get_var( 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->prepare(
-            "SELECT stat_value FROM {$wpdb->prefix}init_chatbox_stats WHERE stat_key = %s",
-            $key
-        )
-    );
-    
-    return $value !== null ? $value : $default;
+function init_plugin_suite_chat_engine_get_stat( $key, $default_value = null ) {
+	global $wpdb;
+
+	$stats_table = $wpdb->prefix . 'init_chatbox_stats';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$value = $wpdb->get_var(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->prepare(
+			"SELECT stat_value FROM {$wpdb->prefix}init_chatbox_stats WHERE stat_key = %s",
+			$key
+		)
+	);
+
+	return null !== $value ? $value : $default_value;
 }
 
 /**
  * Get user IP address
  */
 function init_plugin_suite_chat_engine_get_user_ip() {
-    $ip_keys = ['HTTP_CF_CONNECTING_IP', 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED', 'HTTP_FORWARDED_FOR', 'HTTP_FORWARDED', 'REMOTE_ADDR'];
-    
-    foreach ( $ip_keys as $key ) {
-        if ( array_key_exists( $key, $_SERVER ) && !empty( $_SERVER[$key] ) ) {
-            $ip = sanitize_text_field( wp_unslash( $_SERVER[$key] ) );
-            if ( strpos( $ip, ',' ) !== false ) {
-                $ip = trim( explode( ',', $ip )[0] );
-            }
-            if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-                return $ip;
-            }
-        }
-    }
-    
-    return isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1';
+	$ip_keys = array( 'HTTP_CF_CONNECTING_IP', 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED', 'HTTP_FORWARDED_FOR', 'HTTP_FORWARDED', 'REMOTE_ADDR' );
+
+	foreach ( $ip_keys as $key ) {
+		if ( array_key_exists( $key, $_SERVER ) && ! empty( $_SERVER[ $key ] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
+			if ( strpos( $ip, ',' ) !== false ) {
+				$ip = trim( explode( ',', $ip )[0] );
+			}
+			if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+				return $ip;
+			}
+		}
+	}
+
+	return isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1';
 }
 
 /**
  * Ban user from chat - FIXED FOR REAL
+ *
+ * @param int|null    $user_id        User ID to ban, if registered.
+ * @param string|null $ip_address     IP address to ban, if guest.
+ * @param string|null $display_name   Display name shown in the ban list.
+ * @param string      $reason         Ban reason.
+ * @param int|null    $duration_hours Ban duration in hours, or null for permanent.
+ * @return int|false Insert ID on success, false on failure.
  */
 function init_plugin_suite_chat_engine_ban_user( $user_id = null, $ip_address = null, $display_name = null, $reason = '', $duration_hours = null ) {
-    global $wpdb;
-    
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return false;
-    }
-    
-    if ( empty( $user_id ) && empty( $ip_address ) ) {
-        return false;
-    }
-    
-    $banned_table = $wpdb->prefix . 'init_chatbox_banned';
-    $banned_by = get_current_user_id();
-    $banned_at = current_time( 'mysql' );
-    $expires_at = null;
-    
-    if ( $duration_hours ) {
-        // Lấy timezone của WordPress
-        $timezone_string = get_option( 'timezone_string' );
-        if ( empty( $timezone_string ) ) {
-            $gmt_offset = get_option( 'gmt_offset' );
-            $timezone_string = timezone_name_from_abbr( '', $gmt_offset * 3600, 0 );
-            if ( false === $timezone_string ) {
-                $timezone_string = 'UTC';
-            }
-        }
-        
-        try {
-            $timezone = new DateTimeZone( $timezone_string );
-            $banned_dt = new DateTime( $banned_at, $timezone );
-            $banned_dt->modify( "+{$duration_hours} hours" );
-            $expires_at = $banned_dt->format( 'Y-m-d H:i:s' );
-        } catch ( Exception $e ) {
-            // Fallback nếu có lỗi
-            $expires_at = null;
-        }
-    }
-    
-    $data = [
-        'user_id' => $user_id,
-        'ip_address' => $ip_address,
-        'display_name' => $display_name,
-        'reason' => $reason,
-        'banned_by' => $banned_by,
-        'banned_at' => $banned_at,
-        'expires_at' => $expires_at,
-        'is_active' => 1
-    ];
-    
-    // Debug - chỉ khi WP_DEBUG = true
-    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-        error_log( sprintf(
-            'Chat Engine Ban Debug - Duration: %s hours, Banned At: %s (%d), Expires At: %s (%d)',
-            $duration_hours ?: 'permanent',
-            $banned_at,
-            isset( $banned_timestamp ) ? $banned_timestamp : 0,
-            $expires_at ?: 'never',
-            isset( $expires_timestamp ) ? $expires_timestamp : 0
-        ) );
-    }
-    
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $result = $wpdb->insert( $banned_table, $data );
-    
-    if ( $result ) {
-        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log( sprintf( 
-                'Chat Engine: User banned - ID: %s, IP: %s, Name: %s, By: %s, Reason: %s, Expires: %s',
-                $user_id ?: 'N/A',
-                $ip_address ?: 'N/A', 
-                $display_name ?: 'N/A',
-                $banned_by,
-                $reason,
-                $expires_at ?: 'Never'
-            ) );
-        }
+	global $wpdb;
 
-        // Clear cache
-        if ( $user_id ) {
-            wp_cache_delete( 'banned_uid_' . $user_id, 'init_chat_engine' );
-        }
-        if ( $ip_address ) {
-            wp_cache_delete( 'banned_ip_' . md5( $ip_address ), 'init_chat_engine' );
-        }
-        
-        return $wpdb->insert_id;
-    }
-    
-    return false;
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
+
+	if ( empty( $user_id ) && empty( $ip_address ) ) {
+		return false;
+	}
+
+	$banned_table = $wpdb->prefix . 'init_chatbox_banned';
+	$banned_by    = get_current_user_id();
+	$banned_at    = current_time( 'mysql' );
+	$expires_at   = null;
+
+	if ( $duration_hours ) {
+		// Lấy timezone của WordPress.
+		$timezone_string = get_option( 'timezone_string' );
+		if ( empty( $timezone_string ) ) {
+			$gmt_offset      = get_option( 'gmt_offset' );
+			$timezone_string = timezone_name_from_abbr( '', $gmt_offset * 3600, 0 );
+			if ( false === $timezone_string ) {
+				$timezone_string = 'UTC';
+			}
+		}
+
+		try {
+			$timezone  = new DateTimeZone( $timezone_string );
+			$banned_dt = new DateTime( $banned_at, $timezone );
+			$banned_dt->modify( "+{$duration_hours} hours" );
+			$expires_at = $banned_dt->format( 'Y-m-d H:i:s' );
+		} catch ( Exception $e ) {
+			// Fallback nếu có lỗi.
+			$expires_at = null;
+		}
+	}
+
+	$data = array(
+		'user_id'      => $user_id,
+		'ip_address'   => $ip_address,
+		'display_name' => $display_name,
+		'reason'       => $reason,
+		'banned_by'    => $banned_by,
+		'banned_at'    => $banned_at,
+		'expires_at'   => $expires_at,
+		'is_active'    => 1,
+	);
+
+	// Debug - chỉ khi WP_DEBUG = true.
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log(
+			sprintf(
+				'Chat Engine Ban Debug - Duration: %s hours, Banned At: %s (%d), Expires At: %s (%d)',
+				$duration_hours ? $duration_hours : 'permanent',
+				$banned_at,
+				isset( $banned_timestamp ) ? $banned_timestamp : 0,
+				$expires_at ? $expires_at : 'never',
+				isset( $expires_timestamp ) ? $expires_timestamp : 0
+			)
+		);
+	}
+
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$result = $wpdb->insert( $banned_table, $data );
+
+	if ( $result ) {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log(
+				sprintf(
+					'Chat Engine: User banned - ID: %s, IP: %s, Name: %s, By: %s, Reason: %s, Expires: %s',
+					$user_id ? $user_id : 'N/A',
+					$ip_address ? $ip_address : 'N/A',
+					$display_name ? $display_name : 'N/A',
+					$banned_by,
+					$reason,
+					$expires_at ? $expires_at : 'Never'
+				)
+			);
+		}
+
+		// Clear cache.
+		if ( $user_id ) {
+			wp_cache_delete( 'banned_uid_' . $user_id, 'init_chat_engine' );
+		}
+		if ( $ip_address ) {
+			wp_cache_delete( 'banned_ip_' . md5( $ip_address ), 'init_chat_engine' );
+		}
+
+		return $wpdb->insert_id;
+	}
+
+	return false;
 }
 
 /**
  * Unban user from chat
+ *
+ * @param int|null    $ban_id     Ban record ID to remove.
+ * @param int|null    $user_id    User ID to unban, if registered.
+ * @param string|null $ip_address IP address to unban, if guest.
+ * @return bool
  */
 function init_plugin_suite_chat_engine_unban_user( $ban_id = null, $user_id = null, $ip_address = null ) {
-    global $wpdb;
-    
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return false;
-    }
-    
-    $banned_table = $wpdb->prefix . 'init_chatbox_banned';
-    $where = [];
-    $formats = [];
-    
-    if ( $ban_id ) {
-        $where['id'] = $ban_id;
-        $formats[] = '%d';
-    } elseif ( $user_id ) {
-        $where['user_id'] = $user_id;
-        $formats[] = '%d';
-    } elseif ( $ip_address ) {
-        $where['ip_address'] = $ip_address;
-        $formats[] = '%s';
-    } else {
-        return false;
-    }
-    
-    $where['is_active'] = 1;
-    $formats[] = '%d';
+	global $wpdb;
 
-    // Lấy record trước khi update
-    $record = null;
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return false;
+	}
 
-    if ( $ban_id ) {
+	$banned_table = $wpdb->prefix . 'init_chatbox_banned';
+	$where        = array();
+	$formats      = array();
+
+	if ( $ban_id ) {
+		$where['id'] = $ban_id;
+		$formats[]   = '%d';
+	} elseif ( $user_id ) {
+		$where['user_id'] = $user_id;
+		$formats[]        = '%d';
+	} elseif ( $ip_address ) {
+		$where['ip_address'] = $ip_address;
+		$formats[]           = '%s';
+	} else {
+		return false;
+	}
+
+	$where['is_active'] = 1;
+	$formats[]          = '%d';
+
+	// Lấy record trước khi update.
+	$record = null;
+
+	if ( $ban_id ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        $record = $wpdb->get_row(
+		$record = $wpdb->get_row(
             // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-            $wpdb->prepare(
-                "SELECT user_id, ip_address FROM {$banned_table} WHERE id = %d",
-                $ban_id
-            )
+			$wpdb->prepare(
+				"SELECT user_id, ip_address FROM {$banned_table} WHERE id = %d",
+				$ban_id
+			)
             // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-        );
-    }
-    
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $result = $wpdb->update(
-        $banned_table,
-        [ 'is_active' => 0 ],    // data to update
-        $where,                   // where conditions (key-value pairs)
-        [ '%d' ],                // format for data
-        $formats                 // format for where conditions
-    );
-    
-    if ( $result !== false ) {
-        // Log the unban action - only in debug mode
-        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log( sprintf( 
-                'Chat Engine: User unbanned - Ban ID: %s, User ID: %s, IP: %s, By: %s',
-                $ban_id ?: 'N/A',
-                $user_id ?: 'N/A',
-                $ip_address ?: 'N/A',
-                get_current_user_id()
-            ) );
-        }
+		);
+	}
 
-        if ( $record ) {
-            if ( $record->user_id ) {
-                wp_cache_delete( 'banned_uid_' . $record->user_id, 'init_chat_engine' );
-            }
-            if ( $record->ip_address ) {
-                wp_cache_delete( 'banned_ip_' . md5( $record->ip_address ), 'init_chat_engine' );
-            }
-        }
-        
-        return true;
-    }
-    
-    return false;
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$result = $wpdb->update(
+		$banned_table,
+		array( 'is_active' => 0 ),    // data to update.
+		$where,                   // where conditions (key-value pairs).
+		array( '%d' ),                // format for data.
+		$formats                 // format for where conditions.
+	);
+
+	if ( false !== $result ) {
+		// Log the unban action - only in debug mode.
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log(
+				sprintf(
+					'Chat Engine: User unbanned - Ban ID: %s, User ID: %s, IP: %s, By: %s',
+					$ban_id ? $ban_id : 'N/A',
+					$user_id ? $user_id : 'N/A',
+					$ip_address ? $ip_address : 'N/A',
+					get_current_user_id()
+				)
+			);
+		}
+
+		if ( $record ) {
+			if ( $record->user_id ) {
+				wp_cache_delete( 'banned_uid_' . $record->user_id, 'init_chat_engine' );
+			}
+			if ( $record->ip_address ) {
+				wp_cache_delete( 'banned_ip_' . md5( $record->ip_address ), 'init_chat_engine' );
+			}
+		}
+
+		return true;
+	}
+
+	return false;
 }
 
 /**
  * Check if user is banned (cached)
+ *
+ * @param int|null    $user_id    User ID to check, if registered.
+ * @param string|null $ip_address IP address to check, if guest.
+ * @return array|false Ban record on match, false otherwise.
  */
 function init_plugin_suite_chat_engine_check_user_banned( $user_id = null, $ip_address = null ) {
-    global $wpdb;
+	global $wpdb;
 
-    if ( empty( $user_id ) && empty( $ip_address ) ) {
-        return false;
-    }
+	if ( empty( $user_id ) && empty( $ip_address ) ) {
+		return false;
+	}
 
-    $cache_group = 'init_chat_engine';
-    $cache_ttl   = 10 * MINUTE_IN_SECONDS;
+	$cache_group = 'init_chat_engine';
+	$cache_ttl   = 10 * MINUTE_IN_SECONDS;
 
-    $cache_keys = [];
+	$cache_keys = array();
 
-    if ( $user_id ) {
-        $cache_keys[] = 'banned_uid_' . $user_id;
-    }
-    if ( $ip_address ) {
-        $cache_keys[] = 'banned_ip_' . md5( $ip_address );
-    }
+	if ( $user_id ) {
+		$cache_keys[] = 'banned_uid_' . $user_id;
+	}
+	if ( $ip_address ) {
+		$cache_keys[] = 'banned_ip_' . md5( $ip_address );
+	}
 
-    // Try cache
-    foreach ( $cache_keys as $key ) {
-        $cached = wp_cache_get( $key, $cache_group );
-        if ( $cached !== false ) {
-            return $cached;
-        }
-    }
+	// Try cache.
+	foreach ( $cache_keys as $key ) {
+		$cached = wp_cache_get( $key, $cache_group );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+	}
 
-    $current_time = current_time( 'mysql' );
-    $ban_record   = false;
+	$current_time = current_time( 'mysql' );
+	$ban_record   = false;
 
-    // Check user_id
-    if ( $user_id ) {
+	// Check user_id.
+	if ( $user_id ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-        $ban_record = $wpdb->get_row( 
-            $wpdb->prepare(
-                "SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
+		$ban_record = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
                  WHERE user_id = %d 
                  AND is_active = 1 
                  AND (expires_at IS NULL OR expires_at > %s) 
                  LIMIT 1",
-                $user_id,
-                $current_time
-            )
-        );
+				$user_id,
+				$current_time
+			)
+		);
 
-        if ( $ban_record ) {
-            foreach ( $cache_keys as $key ) {
-                wp_cache_set( $key, $ban_record, $cache_group, $cache_ttl );
-            }
-            return $ban_record;
-        }
-    }
+		if ( $ban_record ) {
+			foreach ( $cache_keys as $key ) {
+				wp_cache_set( $key, $ban_record, $cache_group, $cache_ttl );
+			}
+			return $ban_record;
+		}
+	}
 
-    // Check IP
-    if ( $ip_address ) {
+	// Check IP.
+	if ( $ip_address ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-        $ban_record = $wpdb->get_row( 
-            $wpdb->prepare(
-                "SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
+		$ban_record = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
                  WHERE ip_address = %s 
                  AND is_active = 1 
                  AND (expires_at IS NULL OR expires_at > %s) 
                  LIMIT 1",
-                $ip_address,
-                $current_time
-            )
-        );
+				$ip_address,
+				$current_time
+			)
+		);
 
-        if ( $ban_record ) {
-            foreach ( $cache_keys as $key ) {
-                wp_cache_set( $key, $ban_record, $cache_group, $cache_ttl );
-            }
-            return $ban_record;
-        }
-    }
+		if ( $ban_record ) {
+			foreach ( $cache_keys as $key ) {
+				wp_cache_set( $key, $ban_record, $cache_group, $cache_ttl );
+			}
+			return $ban_record;
+		}
+	}
 
-    // Cache negative
-    foreach ( $cache_keys as $key ) {
-        wp_cache_set( $key, false, $cache_group, $cache_ttl );
-    }
+	// Cache negative.
+	foreach ( $cache_keys as $key ) {
+		wp_cache_set( $key, false, $cache_group, $cache_ttl );
+	}
 
-    return false;
+	return false;
 }
 
 /**
  * Get all banned users - FIXED VERSION
+ *
+ * @param bool $active_only Whether to return only currently active bans.
+ * @return array
  */
 function init_plugin_suite_chat_engine_get_banned_users( $active_only = true ) {
-    global $wpdb;
-    
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return [];
-    }
-    
-    if ( $active_only ) {
+	global $wpdb;
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return array();
+	}
+
+	if ( $active_only ) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $results = $wpdb->get_results( 
-            $wpdb->prepare(
-                "SELECT b.*, u.display_name as banned_by_name 
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT b.*, u.display_name as banned_by_name 
                  FROM `{$wpdb->prefix}init_chatbox_banned` b 
                  LEFT JOIN `{$wpdb->users}` u ON b.banned_by = u.ID 
                  WHERE b.is_active = %d
                  ORDER BY b.banned_at DESC",
-                1
-            )
-        );
-    } else {
+				1
+			)
+		);
+	} else {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $results = $wpdb->get_results( 
-            $wpdb->prepare(
-                "SELECT b.*, u.display_name as banned_by_name 
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT b.*, u.display_name as banned_by_name 
                  FROM `{$wpdb->prefix}init_chatbox_banned` b 
                  LEFT JOIN `{$wpdb->users}` u ON b.banned_by = u.ID 
                  ORDER BY b.banned_at DESC LIMIT %d",
-                9999
-            )
-        );
-    }
-    
-    return $results;
+				9999
+			)
+		);
+	}
+
+	return $results;
 }
 
 /**
  * Clean up expired bans - FIXED VERSION
  */
 function init_plugin_suite_chat_engine_cleanup_expired_bans() {
-    global $wpdb;
-    
+	global $wpdb;
+
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $result = $wpdb->query(
-        $wpdb->prepare(
-            "UPDATE `{$wpdb->prefix}init_chatbox_banned` 
+	$result = $wpdb->query(
+		$wpdb->prepare(
+			"UPDATE `{$wpdb->prefix}init_chatbox_banned` 
              SET is_active = %d 
              WHERE is_active = %d 
              AND expires_at IS NOT NULL 
              AND expires_at <= NOW()",
-            0, 1
-        )
-    );
-    
-    if ( $result && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			0,
+			1
+		)
+	);
+
+	if ( $result && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
         // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-        error_log( "Chat Engine: Cleaned up {$result} expired bans" );
-    }
-    
-    return $result;
+		error_log( "Chat Engine: Cleaned up {$result} expired bans" );
+	}
+
+	return $result;
 }
 
 /**
  * Check rate limit for chat messages
+ *
+ * @param string   $user_ip Guest IP address.
+ * @param int|null $user_id User ID, if logged in.
+ * @return bool True if within limit (allowed to send).
  */
 function init_plugin_suite_chat_engine_check_rate_limit( $user_ip, $user_id = null ) {
-    $transient_key = 'init_chat_rate_limit_' . md5( $user_ip . ( $user_id ? '_' . $user_id : '' ) );
-    $attempts = get_transient( $transient_key );
-    
-    $options = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, [] );
-    $rate_limit = isset( $options['rate_limit'] ) ? (int) $options['rate_limit'] : 10; // messages per minute
-    
-    if ( $attempts === false ) {
-        set_transient( $transient_key, 1, 60 ); // 1 minute
-        return true;
-    }
-    
-    if ( $attempts >= $rate_limit ) {
-        return false;
-    }
-    
-    set_transient( $transient_key, $attempts + 1, 60 );
-    return true;
+	$transient_key = 'init_chat_rate_limit_' . md5( $user_ip . ( $user_id ? '_' . $user_id : '' ) );
+	$attempts      = get_transient( $transient_key );
+
+	$options    = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, array() );
+	$rate_limit = isset( $options['rate_limit'] ) ? (int) $options['rate_limit'] : 10; // messages per minute.
+
+	if ( false === $attempts ) {
+		set_transient( $transient_key, 1, 60 ); // 1 minute
+		return true;
+	}
+
+	if ( $attempts >= $rate_limit ) {
+		return false;
+	}
+
+	set_transient( $transient_key, $attempts + 1, 60 );
+	return true;
 }
 
-// Register hooks
+// Register hooks.
 register_activation_hook( INIT_PLUGIN_SUITE_CHAT_ENGINE_PATH . 'init-chat-engine.php', 'init_plugin_suite_chat_engine_activate' );
 register_deactivation_hook( INIT_PLUGIN_SUITE_CHAT_ENGINE_PATH . 'init-chat-engine.php', 'init_plugin_suite_chat_engine_deactivate' );
 
-// Check for database upgrades on admin_init
+// Check for database upgrades on admin_init.
 add_action( 'admin_init', 'init_plugin_suite_chat_engine_check_db_upgrade' );
 
-// Register cleanup hook
+// Register cleanup hook.
 add_action( 'init_chat_engine_cleanup_messages', 'init_plugin_suite_chat_engine_cleanup_messages' );
 
-// Update daily stats
-add_action( 'init', function() {
-    $today = gmdate( 'Y-m-d' );
-    $last_stat_update = get_option( 'init_chat_last_daily_stat_update', '' );
-    
-    if ( $last_stat_update !== $today ) {
-        // Reset daily counters
-        init_plugin_suite_chat_engine_update_stat( 'messages_today', 0 );
-        init_plugin_suite_chat_engine_update_stat( 'active_users_today', 0 );
-        update_option( 'init_chat_last_daily_stat_update', $today );
-    }
-});
+// Update daily stats.
+add_action(
+	'init',
+	function () {
+		$today            = gmdate( 'Y-m-d' );
+		$last_stat_update = get_option( 'init_chat_last_daily_stat_update', '' );
+
+		if ( $last_stat_update !== $today ) {
+			// Reset daily counters.
+			init_plugin_suite_chat_engine_update_stat( 'messages_today', 0 );
+			init_plugin_suite_chat_engine_update_stat( 'active_users_today', 0 );
+			update_option( 'init_chat_last_daily_stat_update', $today );
+		}
+	}
+);
 
 /**
  * Delete all chat messages (nuclear cleanup)
@@ -702,79 +749,79 @@ add_action( 'init', function() {
  * - Keeps database integrity (TRUNCATE for performance)
  */
 function init_plugin_suite_chat_engine_delete_all_messages() {
-    // Chỉ admin mới được phép
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return new WP_Error(
-            'unauthorized',
-            __( 'You do not have permission to perform this action.', 'init-chat-engine' ),
-            [ 'status' => 403 ]
-        );
-    }
+	// Chỉ admin mới được phép.
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return new WP_Error(
+			'unauthorized',
+			__( 'You do not have permission to perform this action.', 'init-chat-engine' ),
+			array( 'status' => 403 )
+		);
+	}
 
-    global $wpdb;
-    $table_name  = $wpdb->prefix . 'init_chatbox_msgs';
-    $stats_table = $wpdb->prefix . 'init_chatbox_stats';
+	global $wpdb;
+	$table_name  = $wpdb->prefix . 'init_chatbox_msgs';
+	$stats_table = $wpdb->prefix . 'init_chatbox_stats';
 
-    // Bắt đầu transaction (nếu DB hỗ trợ)
+	// Bắt đầu transaction (nếu DB hỗ trợ).
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-    $wpdb->query( 'START TRANSACTION' );
+	$wpdb->query( 'START TRANSACTION' );
 
-    try {
-        // Truncate bảng message — nhanh, sạch, reset AUTO_INCREMENT
+	try {
+		// Truncate bảng message — nhanh, sạch, reset AUTO_INCREMENT.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-        $wpdb->query( "TRUNCATE TABLE {$table_name}" );
+		$wpdb->query( "TRUNCATE TABLE {$table_name}" );
 
-        // Reset các thống kê liên quan
-        $default_stats = [
-            'total_messages'     => 0,
-            'messages_today'     => 0,
-            'active_users_today' => 0,
-            'last_cleanup'       => current_time( 'mysql' ),
-        ];
+		// Reset các thống kê liên quan.
+		$default_stats = array(
+			'total_messages'     => 0,
+			'messages_today'     => 0,
+			'active_users_today' => 0,
+			'last_cleanup'       => current_time( 'mysql' ),
+		);
 
-        foreach ( $default_stats as $key => $value ) {
+		foreach ( $default_stats as $key => $value ) {
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-            $wpdb->replace(
-                $stats_table,
-                [
-                    'stat_key'   => $key,
-                    'stat_value' => $value,
-                    'updated_at' => current_time( 'mysql' ),
-                ],
-                [ '%s', '%s', '%s' ]
-            );
-        }
+			$wpdb->replace(
+				$stats_table,
+				array(
+					'stat_key'   => $key,
+					'stat_value' => $value,
+					'updated_at' => current_time( 'mysql' ),
+				),
+				array( '%s', '%s', '%s' )
+			);
+		}
 
-        // Commit transaction
+		// Commit transaction.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->query( 'COMMIT' );
+		$wpdb->query( 'COMMIT' );
 
-        // Toàn bộ tin nhắn đã bị xóa sạch -> phải xóa cache liên quan, không thì
-        // frontend vẫn hiển thị tin cũ (đã cache) cho tới khi hết TTL. Xóa cả cache
-        // pinned_message vì tin đang ghim (nếu có) giờ cũng không còn tồn tại nữa.
-        init_plugin_suite_chat_engine_clear_message_cache();
-        wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+		// Toàn bộ tin nhắn đã bị xóa sạch -> phải xóa cache liên quan, không thì
+		// frontend vẫn hiển thị tin cũ (đã cache) cho tới khi hết TTL. Xóa cả cache
+		// pinned_message vì tin đang ghim (nếu có) giờ cũng không còn tồn tại nữa.
+		init_plugin_suite_chat_engine_clear_message_cache();
+		wp_cache_delete( 'pinned_message', 'init_chat_engine' );
 
-        // Ghi log (nếu WP_DEBUG bật)
-        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		// Ghi log (nếu WP_DEBUG bật).
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            error_log(
-                sprintf(
-                    'Init Chat Engine: All chat messages deleted by admin #%d at %s',
-                    get_current_user_id(),
-                    current_time( 'mysql' )
-                )
-            );
-        }
+			error_log(
+				sprintf(
+					'Init Chat Engine: All chat messages deleted by admin #%d at %s',
+					get_current_user_id(),
+					current_time( 'mysql' )
+				)
+			);
+		}
 
-        return true;
+		return true;
 
-    } catch ( Exception $e ) {
-        // Rollback nếu lỗi
+	} catch ( Exception $e ) {
+		// Rollback nếu lỗi.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->query( 'ROLLBACK' );
-        return new WP_Error( 'db_error', 'Failed to delete messages: ' . $e->getMessage() );
-    }
+		$wpdb->query( 'ROLLBACK' );
+		return new WP_Error( 'db_error', 'Failed to delete messages: ' . $e->getMessage() );
+	}
 }
 
 /**
@@ -782,79 +829,83 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
  * Lưu message_id vào stats table với key 'pinned_message_id'.
  * Lưu snapshot nội dung để tránh query thêm khi render.
  *
- * @param  int       $message_id  ID của tin nhắn cần ghim.
+ * @param  int $message_id  ID của tin nhắn cần ghim.
  * @return true|WP_Error
  */
 function init_plugin_suite_chat_engine_pin_message( int $message_id ) {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), [ 'status' => 403 ] );
-    }
- 
-    global $wpdb;
- 
-    // Kiểm tra message có tồn tại và chưa bị xoá không
-    $msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->prepare(
-            "SELECT id, user_id, display_name, message, created_at
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), array( 'status' => 403 ) );
+	}
+
+	global $wpdb;
+
+	// Kiểm tra message có tồn tại và chưa bị xoá không.
+	$msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->prepare(
+			"SELECT id, user_id, display_name, message, created_at
              FROM `{$wpdb->prefix}init_chatbox_msgs`
              WHERE id = %d AND is_deleted = 0
              LIMIT 1",
-            $message_id
-        )
-    );
- 
-    if ( ! $msg ) {
-        return new WP_Error( 'not_found', __( 'Message not found.', 'init-chat-engine' ), [ 'status' => 404 ] );
-    }
- 
-    // Lưu ID
-    init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', $message_id );
- 
-    // Lưu snapshot (JSON) để GET /messages không cần query thêm
-    $snapshot = wp_json_encode( [
-        'id'           => (int) $msg->id,
-        'user_id'      => $msg->user_id ? (int) $msg->user_id : null,
-        'display_name' => $msg->display_name,
-        'message'      => $msg->message,
-        'created_at'   => $msg->created_at,
-        'pinned_by'    => get_current_user_id(),
-        'pinned_at'    => current_time( 'mysql' ),
-    ] );
-    init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', $snapshot );
- 
-    // Xoá cache
-    wp_cache_delete( 'pinned_message', 'init_chat_engine' );
- 
-    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$message_id
+		)
+	);
+
+	if ( ! $msg ) {
+		return new WP_Error( 'not_found', __( 'Message not found.', 'init-chat-engine' ), array( 'status' => 404 ) );
+	}
+
+	// Lưu ID.
+	init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', $message_id );
+
+	// Lưu snapshot (JSON) để GET /messages không cần query thêm.
+	$snapshot = wp_json_encode(
+		array(
+			'id'           => (int) $msg->id,
+			'user_id'      => $msg->user_id ? (int) $msg->user_id : null,
+			'display_name' => $msg->display_name,
+			'message'      => $msg->message,
+			'created_at'   => $msg->created_at,
+			'pinned_by'    => get_current_user_id(),
+			'pinned_at'    => current_time( 'mysql' ),
+		)
+	);
+	init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', $snapshot );
+
+	// Xoá cache.
+	wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
         // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-        error_log( sprintf(
-            'Init Chat Engine: Message #%d pinned by admin #%d',
-            $message_id,
-            get_current_user_id()
-        ) );
-    }
- 
-    return true;
+		error_log(
+			sprintf(
+				'Init Chat Engine: Message #%d pinned by admin #%d',
+				$message_id,
+				get_current_user_id()
+			)
+		);
+	}
+
+	return true;
 }
- 
+
 /**
  * Bỏ ghim tin nhắn (chỉ admin).
  *
  * @return true|WP_Error
  */
 function init_plugin_suite_chat_engine_unpin_message() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), [ 'status' => 403 ] );
-    }
- 
-    init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', '' );
-    init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', '' );
- 
-    wp_cache_delete( 'pinned_message', 'init_chat_engine' );
- 
-    return true;
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), array( 'status' => 403 ) );
+	}
+
+	init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', '' );
+	init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', '' );
+
+	wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+
+	return true;
 }
- 
+
 /**
  * Lấy tin nhắn đang ghim (có cache).
  * Trả về array data hoặc null nếu chưa ghim.
@@ -862,50 +913,50 @@ function init_plugin_suite_chat_engine_unpin_message() {
  * @return array|null
  */
 function init_plugin_suite_chat_engine_get_pinned_message() {
-    $cache_group = 'init_chat_engine';
-    $cache_key   = 'pinned_message';
-    $cached      = wp_cache_get( $cache_key, $cache_group );
- 
-    if ( $cached !== false ) {
-        return $cached ?: null; // false = cache miss, '' = no pin
-    }
- 
-    $pinned_id = init_plugin_suite_chat_engine_get_stat( 'pinned_message_id', '' );
- 
-    if ( empty( $pinned_id ) ) {
-        wp_cache_set( $cache_key, '', $cache_group, 5 * MINUTE_IN_SECONDS );
-        return null;
-    }
- 
-    $snapshot_json = init_plugin_suite_chat_engine_get_stat( 'pinned_message_snapshot', '' );
- 
-    if ( ! empty( $snapshot_json ) ) {
-        $data = json_decode( $snapshot_json, true );
-        if ( $data ) {
-            wp_cache_set( $cache_key, $data, $cache_group, 5 * MINUTE_IN_SECONDS );
-            return $data;
-        }
-    }
- 
-    // Fallback: query trực tiếp nếu snapshot bị mất
-    global $wpdb;
-    $msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-        $wpdb->prepare(
-            "SELECT id, user_id, display_name, message, created_at
+	$cache_group = 'init_chat_engine';
+	$cache_key   = 'pinned_message';
+	$cached      = wp_cache_get( $cache_key, $cache_group );
+
+	if ( false !== $cached ) {
+		return $cached ? $cached : null; // false = cache miss, '' = no pin.
+	}
+
+	$pinned_id = init_plugin_suite_chat_engine_get_stat( 'pinned_message_id', '' );
+
+	if ( empty( $pinned_id ) ) {
+		wp_cache_set( $cache_key, '', $cache_group, 5 * MINUTE_IN_SECONDS );
+		return null;
+	}
+
+	$snapshot_json = init_plugin_suite_chat_engine_get_stat( 'pinned_message_snapshot', '' );
+
+	if ( ! empty( $snapshot_json ) ) {
+		$data = json_decode( $snapshot_json, true );
+		if ( $data ) {
+			wp_cache_set( $cache_key, $data, $cache_group, 5 * MINUTE_IN_SECONDS );
+			return $data;
+		}
+	}
+
+	// Fallback: query trực tiếp nếu snapshot bị mất.
+	global $wpdb;
+	$msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->prepare(
+			"SELECT id, user_id, display_name, message, created_at
              FROM `{$wpdb->prefix}init_chatbox_msgs`
              WHERE id = %d AND is_deleted = 0
              LIMIT 1",
-            (int) $pinned_id
-        ),
-        ARRAY_A
-    );
- 
-    if ( ! $msg ) {
-        // Message bị xoá → tự động bỏ ghim
-        init_plugin_suite_chat_engine_unpin_message();
-        return null;
-    }
- 
-    wp_cache_set( $cache_key, $msg, $cache_group, 5 * MINUTE_IN_SECONDS );
-    return $msg;
+			(int) $pinned_id
+		),
+		ARRAY_A
+	);
+
+	if ( ! $msg ) {
+		// Message bị xoá → tự động bỏ ghim.
+		init_plugin_suite_chat_engine_unpin_message();
+		return null;
+	}
+
+	wp_cache_set( $cache_key, $msg, $cache_group, 5 * MINUTE_IN_SECONDS );
+	return $msg;
 }

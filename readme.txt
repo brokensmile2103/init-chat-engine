@@ -2,9 +2,9 @@
 Contributors: brokensmile.2103
 Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.6
+Stable tag: 1.3.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.7 – August 21, 2026 =
+- Fix: intermittent missing messages on the frontend chat under concurrent traffic — a race condition in the `GET /messages` polling cache could cause a newly sent message to be silently hidden from all clients until a *later* message triggered a cache clear (symptom: 2nd message never appears, then sending a 3rd makes both appear together; refreshing the page also "fixes" it since page load uses a separate, unaffected cache path). Only reproduces on hosts with a persistent object cache (Redis/Memcached/etc.) under concurrent request timing; does not affect message storage — only what polling clients see, and only temporarily
+- Fix: account age requirement check (`min_account_age_days`) compared the site's local time against WordPress's `user_registered` field, which core always stores in UTC — could make the check off by the site's UTC offset. Now compares against a true UTC timestamp
+- Performance: `get_all_settings()` could be called up to 3 times within a single POST /send request (directly, plus internally by message validation and the account-age check) — now cached per-request so settings are read and merged only once
+- Internal: full WordPress Coding Standards (WPCS) compliance pass — no functional changes intended; see notes below if you maintain a fork or patches against this plugin
+  - Verified with a byte-for-byte token comparison against the previous release to confirm no logic changes beyond the two fixes above
+  - `in_array()` calls now use strict comparison (`true` as third argument) to avoid loose-comparison type coercion edge cases
+  - All conditionals now use Yoda style, all `?:` short ternaries expanded, all inline comments end in proper punctuation, all functions have complete docblocks
 
 = 1.3.6 – August 1, 2026 =
 - Enhancement: relative timestamps ("x minutes...") now also cover weeks, months, and years for older messages — previously capped at "x days"
