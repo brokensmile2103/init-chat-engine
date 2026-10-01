@@ -174,10 +174,6 @@ function init_plugin_suite_chat_engine_sanitize_security_settings( $input ) {
 
 	$sanitized['word_filter_exempt_roles'] = $exempt_roles_input;
 
-	if ( ! empty( $errors ) ) {
-		add_settings_error( 'init_chat_security_settings', 'validation_errors', implode( '<br>', $errors ), 'error' );
-	}
-
 	// Minimum account age (days).
 	$min_account_age = isset( $input['min_account_age_days'] ) ? absint( $input['min_account_age_days'] ) : 0;
 
@@ -187,6 +183,13 @@ function init_plugin_suite_chat_engine_sanitize_security_settings( $input ) {
 	}
 
 	$sanitized['min_account_age_days'] = $min_account_age;
+
+	// Gọi add_settings_error() SAU KHI đã validate xong mọi field - trước 1.3.8 khối
+	// này nằm phía trên phần min_account_age_days nên lỗi của field đó không bao giờ
+	// được hiển thị cho admin.
+	if ( ! empty( $errors ) ) {
+		add_settings_error( 'init_chat_security_settings', 'validation_errors', implode( '<br>', $errors ), 'error' );
+	}
 
 	return $sanitized;
 }

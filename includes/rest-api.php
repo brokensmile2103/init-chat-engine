@@ -78,7 +78,7 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
 					'type'              => 'string',
 					'required'          => false,
 					'validate_callback' => function ( $param ) {
-						return empty( $param ) || ( is_string( $param ) && strlen( trim( $param ) ) <= 100 );
+						return empty( $param ) || ( is_string( $param ) && init_plugin_suite_chat_engine_strlen( trim( $param ) ) <= 100 );
 					},
 					'sanitize_callback' => 'sanitize_text_field',
 				),
@@ -191,14 +191,17 @@ function init_plugin_suite_chat_engine_send_permission_check( $request ) {
  * @return bool
  */
 function init_plugin_suite_chat_engine_validate_message( $message ) {
-	if ( empty( trim( $message ) ) ) {
+	if ( ! is_string( $message ) || '' === trim( $message ) ) {
 		return false;
 	}
 
 	$settings   = init_plugin_suite_chat_engine_get_all_settings();
 	$max_length = isset( $settings['max_message_length'] ) ? (int) $settings['max_message_length'] : 500;
 
-	if ( strlen( $message ) > $max_length ) {
+	// Đếm theo KÝ TỰ (không phải byte) - khớp với bộ đếm ký tự ở client và mô tả
+	// "Maximum number of characters" trong Settings. Trước 1.3.8 dùng strlen() nên
+	// tin tiếng Việt / emoji (2-4 byte mỗi ký tự) bị chặn sớm hơn giới hạn thật.
+	if ( init_plugin_suite_chat_engine_strlen( $message ) > $max_length ) {
 		return false;
 	}
 
@@ -343,8 +346,9 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 
     // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-	$settings     = init_plugin_suite_chat_engine_get_all_settings();
-	$show_avatars = ! empty( $settings['show_avatars'] );
+	$settings        = init_plugin_suite_chat_engine_get_all_settings();
+	$show_avatars    = ! empty( $settings['show_avatars'] );
+	$current_user_id = is_user_logged_in() ? get_current_user_id() : 0;
 
 	/**
 	 * Trả về URL profile của user. Mặc định dùng author archive.
@@ -373,7 +377,7 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 	};
 
 	// Hàm format 1 row message.
-	$format_message = function ( &$row ) use ( $show_avatars, $get_profile_url ) {
+	$format_message = function ( &$row ) use ( $show_avatars, $get_profile_url, $current_user_id ) {
 		// Time
 		// Lưu ý quan trọng: $row['created_at'] được lưu bằng current_time('mysql')
 		// (giờ ĐỊA PHƯƠNG theo timezone site, KHÔNG phải UTC). WordPress ép PHP
@@ -406,7 +410,7 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 		}
 
 		// User flags.
-		$row['is_current_user'] = is_user_logged_in() && $uid > 0 && get_current_user_id() === $uid;
+		$row['is_current_user'] = $current_user_id > 0 && $current_user_id === $uid;
 		$row['user_type']       = $uid > 0 ? 'registered' : 'guest';
 
 		// Profile URL (yêu cầu của bro).
@@ -532,14 +536,14 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
 	// (kể cả người vừa mở tab) thấy tin này ngay lần poll/tải trang kế tiếp.
 	init_plugin_suite_chat_engine_clear_frontend_message_cache();
 
+	// Danh sách tin ở trang quản trị cũng cần thấy tin mới ngay (không đợi TTL).
+	init_plugin_suite_chat_engine_bump_admin_cache();
+
 	do_action( 'init_plugin_suite_chat_engine_message_saved', $message_id, $message, $user_id, $display_name );
 
-	// Update statistics.
-	$total_messages = init_plugin_suite_chat_engine_get_stat( 'total_messages', 0 );
-	$messages_today = init_plugin_suite_chat_engine_get_stat( 'messages_today', 0 );
-
-	init_plugin_suite_chat_engine_update_stat( 'total_messages', $total_messages + 1 );
-	init_plugin_suite_chat_engine_update_stat( 'messages_today', $messages_today + 1 );
+	// Update statistics (atomic +1, 1 query mỗi stat thay vì đọc rồi ghi).
+	init_plugin_suite_chat_engine_increment_stat( 'total_messages' );
+	init_plugin_suite_chat_engine_increment_stat( 'messages_today' );
 
 	// Cleanup if over limit (using new soft delete).
 	$max   = isset( $settings['max_messages'] ) ? (int) $settings['max_messages'] : 1000;
@@ -612,7 +616,13 @@ function init_plugin_suite_chat_engine_get_user_status( WP_REST_Request $request
 		'avatar_url'   => $current_user->exists() ? get_avatar_url( $current_user->ID, array( 'size' => 64 ) ) : '',
 		'allow_guests' => ! empty( $settings['allow_guests'] ),
 		'is_banned'    => (bool) $ban_check,
-		'ban_info'     => $ban_check ? $ban_check : null,
+		// Chỉ trả các trường cần cho người bị ban, không lộ ID admin đã ban,
+		// IP lưu trong DB hay dữ liệu nội bộ khác của bản ghi ban.
+		'ban_info'     => $ban_check ? array(
+			'reason'     => isset( $ban_check->reason ) ? $ban_check->reason : '',
+			'banned_at'  => isset( $ban_check->banned_at ) ? $ban_check->banned_at : null,
+			'expires_at' => isset( $ban_check->expires_at ) ? $ban_check->expires_at : null,
+		) : null,
 		'settings'     => array(
 			'show_avatars'         => ! empty( $settings['show_avatars'] ),
 			'show_timestamps'      => ! empty( $settings['show_timestamps'] ),
@@ -741,6 +751,7 @@ function init_plugin_suite_chat_engine_moderate_message( WP_REST_Request $reques
 			// Tin vừa bị ẩn khỏi danh sách hiển thị -> xóa cache liên quan (cascade
 			// sang cả cache frontend, xem init_plugin_suite_chat_engine_clear_message_cache()).
 			init_plugin_suite_chat_engine_clear_message_cache();
+			init_plugin_suite_chat_engine_maybe_unpin_deleted( array( $message_id ) );
 			break;
 
 		case 'ban_user':

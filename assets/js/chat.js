@@ -1,6 +1,13 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const root = document.getElementById('init-chatbox-root');
-    if (!root || typeof InitChatEngineData === 'undefined') return;
+    if (typeof InitChatEngineData === 'undefined') return;
+
+    // Container mặc định có id "init-chatbox-root", nhưng shortcode cho phép đổi id
+    // (vd: [init_chatbox id="my-chat"]). Trước 1.3.8 JS chỉ tìm đúng id mặc định nên
+    // chat không khởi động khi dùng id tùy chỉnh.
+    const customRootId = InitChatEngineData.shortcode_atts && InitChatEngineData.shortcode_atts.id;
+    const root = document.getElementById('init-chatbox-root') ||
+        (customRootId ? document.getElementById(customRootId) : null);
+    if (!root) return;
 
     // DOM elements
     const messagesEl = document.getElementById('init-chatbox-messages');
@@ -153,6 +160,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ===== UTILITY FUNCTIONS =====
 
+    // Ghép query string an toàn cho cả 2 dạng REST URL: /wp-json/... (pretty
+    // permalink) và index.php?rest_route=... (permalink "Plain"). Trước 1.3.8 luôn
+    // nối bằng "?" nên ở dạng Plain URL bị hỏng (2 dấu "?") -> REST trả 404 và chat
+    // không tải được tin nhắn.
+    function withQuery(baseUrl, query) {
+        return baseUrl + (baseUrl.indexOf('?') === -1 ? '?' : '&') + query;
+    }
+
     // ===== FX KEYWORD (PER-MESSAGE) =====
     function escapeRegExp(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -243,11 +258,45 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Escape cho cả nội dung text LẪN giá trị thuộc tính HTML. Bản cũ dùng
+    // textContent -> innerHTML, cách này KHÔNG escape dấu nháy (" và '), nên chuỗi
+    // do người dùng nhập (tên hiển thị, URL trong tin nhắn) có thể thoát khỏi
+    // thuộc tính src/alt/href/data-* khi ghép vào template HTML.
+    const HTML_ESCAPE_MAP = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+
     function escapeHTML(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+        if (str === null || str === undefined || str === '') return '';
+        return String(str).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
+    }
+
+    // Class dùng để ẩn phần tử: chỉ cần dò 1 lần cho cả trang. Bản cũ tạo div test
+    // + getComputedStyle() 3 lần (ép trình duyệt tính lại layout) MỖI lần gọi
+    // hideElement().
+    let detectedHideClass;
+
+    function getHideClass() {
+        if (detectedHideClass !== undefined) return detectedHideClass;
+
+        const testDiv = document.createElement('div');
+        document.body.appendChild(testDiv);
+
+        detectedHideClass = null;
+        for (const cls of ['uk-hidden', 'hidden', 'ice-hidden']) {
+            testDiv.className = cls;
+            if (window.getComputedStyle(testDiv).display === 'none') {
+                detectedHideClass = cls;
+                break;
+            }
+        }
+
+        document.body.removeChild(testDiv);
+        return detectedHideClass;
     }
 
     // Enhanced show/hide functions with class support
@@ -260,26 +309,10 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         
-        const testDiv = document.createElement('div');
-        document.body.appendChild(testDiv);
+        const hideClass = getHideClass();
         
-        testDiv.className = 'uk-hidden';
-        const ukHiddenWorks = window.getComputedStyle(testDiv).display === 'none';
-        
-        testDiv.className = 'hidden';
-        const hiddenWorks = window.getComputedStyle(testDiv).display === 'none';
-        
-        testDiv.className = 'ice-hidden';
-        const iceHiddenWorks = window.getComputedStyle(testDiv).display === 'none';
-        
-        document.body.removeChild(testDiv);
-        
-        if (ukHiddenWorks) {
-            element.classList.add('uk-hidden');
-        } else if (hiddenWorks) {
-            element.classList.add('hidden');
-        } else if (iceHiddenWorks) {
-            element.classList.add('ice-hidden');
+        if (hideClass) {
+            element.classList.add(hideClass);
         } else {
             element.style.display = 'none';
         }
@@ -350,6 +383,17 @@ document.addEventListener('DOMContentLoaded', function () {
         updatePollingInterval();
     }
 
+    // mousemove bắn ra hàng chục event/giây - chỉ cần ghi nhận hoạt động tối đa
+    // 1 lần/giây là đủ chính xác cho việc điều chỉnh tần suất polling.
+    let lastPassiveActivityAt = 0;
+
+    function recordActivityThrottled() {
+        const now = Date.now();
+        if (now - lastPassiveActivityAt < 1000) return;
+        lastPassiveActivityAt = now;
+        recordActivity();
+    }
+
     // ===== AVATAR FUNCTIONS =====
 
     function getFallbackAvatar(displayName) {
@@ -381,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 border: 2px solid white;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             ">
-                ${firstLetter}
+                ${escapeHTML(firstLetter)}
             </div>
         `;
     }
@@ -928,7 +972,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const url = `${config.fetchUrl}?after_id=${state.lastMessageId}`;
+        const url = withQuery(config.fetchUrl, `after_id=${state.lastMessageId}`);
         const { promise } = createManagedRequest(url, {}, 'fetch');
         
         promise
@@ -1029,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const scrollHeightBefore = messagesEl.scrollHeight;
         const scrollTopBefore = messagesEl.scrollTop;
 
-        const url = `${config.fetchUrl}?before_id=${state.firstMessageId}&limit=15`;
+        const url = withQuery(config.fetchUrl, `before_id=${state.firstMessageId}&limit=15`);
         const { promise } = createManagedRequest(url, {}, 'loadMore');
 
         promise
@@ -1335,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Mouse/scroll activity
-    document.addEventListener('mousemove', recordActivity, { passive: true });
+    document.addEventListener('mousemove', recordActivityThrottled, { passive: true });
     document.addEventListener('click', recordActivity);
 
     // Enhanced scroll handling
@@ -1424,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 
                 if (name.length > 50) {
-                    showError('Name is too long (max 50 characters)');
+                    showError(config.i18n.name_too_long || 'Name is too long (max 50 characters)');
                     return;
                 }
                 
@@ -1523,7 +1567,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Load initial messages
         if (loadingEl) showElement(loadingEl);
         
-        const url = `${config.fetchUrl}?limit=15`;
+        const url = withQuery(config.fetchUrl, 'limit=15');
         const { promise } = createManagedRequest(url, {}, 'init');
         
         promise
@@ -1996,17 +2040,9 @@ document.addEventListener('DOMContentLoaded', function () {
     window._initChatPinHandleResponse = handlePinnedFromResponse;
 
     // ---- Load trạng thái pin ban đầu --------------------------
-
-    ( function loadInitialPinnedState() {
-        fetch( config.fetchUrl + '?limit=1' )
-            .then( function ( r ) { return r.json(); } )
-            .then( function ( data ) {
-                if ( data && data.pinned_message ) {
-                    renderPinnedBanner( data.pinned_message );
-                }
-            } )
-            .catch( function () { /* fail silently */ } );
-    } )();
+    // Không cần request riêng (?limit=1) như trước: response của lần tải tin nhắn
+    // đầu tiên (initializeChat) đã kèm sẵn pinned_message và được xử lý qua
+    // handlePinnedFromResponse() - tiết kiệm 1 request REST cho mỗi lượt tải trang.
 
     // ============================================================
     // END PINNED MESSAGE FEATURE

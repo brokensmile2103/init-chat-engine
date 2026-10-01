@@ -185,9 +185,12 @@ function init_plugin_suite_chat_engine_migrate_db_1_3_5() {
 function init_plugin_suite_chat_engine_cleanup_messages() {
 	global $wpdb;
 
-	$options      = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, array() );
-	$max_messages = isset( $options['max_messages'] ) ? (int) $options['max_messages'] : 1000;
-	$cleanup_days = isset( $options['cleanup_days'] ) ? (int) $options['cleanup_days'] : 30;
+	// Đọc đúng nhóm option mà trang Settings thực sự lưu (init_chat_*_settings).
+	// Trước 1.3.8 hàm này đọc option cũ INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION (không
+	// còn được trang Settings ghi vào) nên luôn rơi về mặc định 1000/30, bỏ qua
+	// cấu hình thật của admin.
+	$max_messages = (int) init_plugin_suite_chat_engine_get_setting( 'max_messages', 1000 );
+	$cleanup_days = (int) init_plugin_suite_chat_engine_get_setting( 'cleanup_days', 30 );
 
 	$table_name = $wpdb->prefix . 'init_chatbox_msgs';
 	$did_change = false;
@@ -273,6 +276,51 @@ function init_plugin_suite_chat_engine_update_stat( $key, $value ) {
 }
 
 /**
+ * Tăng một stat dạng số nguyên theo kiểu nguyên tử (atomic) trong 1 query duy nhất.
+ *
+ * Thay cho cặp get_stat() + update_stat() (2 query đọc + 2 query ghi mỗi lần gửi
+ * tin): vừa nhanh hơn, vừa tránh mất số đếm khi nhiều request /send chạy đồng thời
+ * (2 request cùng đọc giá trị cũ rồi cùng ghi đè +1).
+ *
+ * @param string $key Stat key to increment.
+ * @param int    $by  Amount to add (default 1).
+ * @return void
+ */
+function init_plugin_suite_chat_engine_increment_stat( $key, $by = 1 ) {
+	global $wpdb;
+
+	$by  = (int) $by;
+	$now = current_time( 'mysql' );
+
+	// Không in lỗi SQL ra output (vd: chèn HTML lỗi vào JSON của REST /send khi
+	// bật WP_DEBUG_DISPLAY) - lỗi đã có nhánh fallback xử lý ngay bên dưới.
+	$suppress = $wpdb->suppress_errors( true );
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$result = $wpdb->query(
+		$wpdb->prepare(
+			"INSERT INTO `{$wpdb->prefix}init_chatbox_stats` (stat_key, stat_value, updated_at)
+             VALUES (%s, %d, %s)
+             ON DUPLICATE KEY UPDATE stat_value = CAST(stat_value AS SIGNED) + %d, updated_at = %s",
+			$key,
+			$by,
+			$now,
+			$by,
+			$now
+		)
+	);
+
+	$wpdb->suppress_errors( $suppress );
+
+	// Lưới an toàn: nếu DB từ chối query trên (vd: giá trị cũ không phải số trong
+	// SQL strict mode) thì quay về cách đọc + ghi như trước 1.3.8.
+	if ( false === $result ) {
+		$current = (int) init_plugin_suite_chat_engine_get_stat( $key, 0 );
+		init_plugin_suite_chat_engine_update_stat( $key, $current + $by );
+	}
+}
+
+/**
  * Ghi nhận "last_activity" nhưng có throttle để tránh ghi DB (REPLACE INTO)
  * trên mỗi request GET /messages. Chat được poll mỗi vài giây bởi mọi client
  * đang mở tab, nên nếu ghi thẳng mỗi lần sẽ tạo áp lực ghi DB rất lớn ở site
@@ -317,21 +365,46 @@ function init_plugin_suite_chat_engine_get_stat( $key, $default_value = null ) {
  * Get user IP address
  */
 function init_plugin_suite_chat_engine_get_user_ip() {
+	// Kết quả không đổi trong 1 request nhưng hàm được gọi nhiều lần (permission
+	// check, ban check, rate limit, insert...) - cache tĩnh theo request.
+	static $cached_ip = null;
+
+	if ( null !== $cached_ip ) {
+		return $cached_ip;
+	}
+
 	$ip_keys = array( 'HTTP_CF_CONNECTING_IP', 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED', 'HTTP_FORWARDED_FOR', 'HTTP_FORWARDED', 'REMOTE_ADDR' );
 
+	/**
+	 * Cho phép site tự chọn header nào được tin cậy để lấy IP.
+	 *
+	 * Mặc định giữ nguyên danh sách cũ (tương thích site chạy sau Cloudflare/proxy).
+	 * Site KHÔNG chạy sau proxy có thể trả về array( 'REMOTE_ADDR' ) để chặn việc
+	 * giả mạo header X-Forwarded-For nhằm lách ban IP / rate limit.
+	 *
+	 * @param string[] $ip_keys Danh sách key trong $_SERVER, theo thứ tự ưu tiên.
+	 */
+	$ip_keys = (array) apply_filters( 'init_plugin_suite_chat_engine_ip_headers', $ip_keys );
+
 	foreach ( $ip_keys as $key ) {
-		if ( array_key_exists( $key, $_SERVER ) && ! empty( $_SERVER[ $key ] ) ) {
+		if ( is_string( $key ) && ! empty( $_SERVER[ $key ] ) ) {
 			$ip = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
 			if ( strpos( $ip, ',' ) !== false ) {
 				$ip = trim( explode( ',', $ip )[0] );
 			}
 			if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-				return $ip;
+				$cached_ip = $ip;
+				return $cached_ip;
 			}
 		}
 	}
 
-	return isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1';
+	// Fallback: REMOTE_ADDR (có thể là IP nội bộ khi chạy localhost/proxy) - vẫn
+	// validate để không bao giờ lưu chuỗi rác vào cột ip_address VARCHAR(45).
+	$remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+	$cached_ip   = filter_var( $remote_addr, FILTER_VALIDATE_IP ) ? $remote_addr : '127.0.0.1';
+
+	return $cached_ip;
 }
 
 /**
@@ -524,6 +597,15 @@ function init_plugin_suite_chat_engine_unban_user( $ban_id = null, $user_id = nu
 			}
 		}
 
+		// Unban theo user_id / IP (không có ban_id) cũng phải xóa cache tương ứng,
+		// nếu không người dùng vẫn bị coi là đang bị ban tới khi cache hết hạn.
+		if ( $user_id ) {
+			wp_cache_delete( 'banned_uid_' . $user_id, 'init_chat_engine' );
+		}
+		if ( $ip_address ) {
+			wp_cache_delete( 'banned_ip_' . md5( $ip_address ), 'init_chat_engine' );
+		}
+
 		return true;
 	}
 
@@ -533,43 +615,72 @@ function init_plugin_suite_chat_engine_unban_user( $ban_id = null, $user_id = nu
 /**
  * Check if user is banned (cached)
  *
+ * Từ 1.3.8 mỗi định danh (user_id / IP) được tra cứu + cache RIÊNG theo đúng key
+ * của nó, và trường hợp "không bị ban" được cache bằng giá trị 'none' thay vì
+ * false. Trước đây negative cache lưu false - mà wp_cache_get() cũng trả false khi
+ * cache miss - nên không bao giờ hit, khiến MỌI lần poll đều phải query bảng ban
+ * (1-2 query/poll/client). Tách key theo định danh cũng giúp ban_user()/unban_user()
+ * xóa đúng cache cần xóa, không bị kết quả cũ của định danh còn lại che mất.
+ *
  * @param int|null    $user_id    User ID to check, if registered.
  * @param string|null $ip_address IP address to check, if guest.
- * @return array|false Ban record on match, false otherwise.
+ * @return object|false Ban record on match, false otherwise.
  */
 function init_plugin_suite_chat_engine_check_user_banned( $user_id = null, $ip_address = null ) {
-	global $wpdb;
-
 	if ( empty( $user_id ) && empty( $ip_address ) ) {
 		return false;
 	}
 
-	$cache_group = 'init_chat_engine';
-	$cache_ttl   = 10 * MINUTE_IN_SECONDS;
-
-	$cache_keys = array();
-
 	if ( $user_id ) {
-		$cache_keys[] = 'banned_uid_' . $user_id;
-	}
-	if ( $ip_address ) {
-		$cache_keys[] = 'banned_ip_' . md5( $ip_address );
+		$ban_record = init_plugin_suite_chat_engine_lookup_ban( 'user_id', $user_id );
+		if ( $ban_record ) {
+			return $ban_record;
+		}
 	}
 
-	// Try cache.
-	foreach ( $cache_keys as $key ) {
-		$cached = wp_cache_get( $key, $cache_group );
-		if ( false !== $cached ) {
+	if ( $ip_address ) {
+		$ban_record = init_plugin_suite_chat_engine_lookup_ban( 'ip_address', $ip_address );
+		if ( $ban_record ) {
+			return $ban_record;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Tra cứu ban đang hiệu lực cho 1 định danh (user_id hoặc IP), có object cache.
+ *
+ * @param string     $field 'user_id' hoặc 'ip_address'.
+ * @param int|string $value Giá trị định danh cần tra.
+ * @return object|false Ban record on match, false otherwise.
+ */
+function init_plugin_suite_chat_engine_lookup_ban( $field, $value ) {
+	global $wpdb;
+
+	$is_user     = ( 'user_id' === $field );
+	$cache_group = 'init_chat_engine';
+	$cache_key   = $is_user ? 'banned_uid_' . (int) $value : 'banned_ip_' . md5( (string) $value );
+	$cache_ttl   = 10 * MINUTE_IN_SECONDS;
+	$now_mysql   = current_time( 'mysql' );
+
+	$cached = wp_cache_get( $cache_key, $cache_group );
+
+	if ( false !== $cached ) {
+		if ( ! is_object( $cached ) ) {
+			// 'none' = đã xác nhận không bị ban.
+			return false;
+		}
+
+		// Ban có thời hạn vẫn còn hiệu lực -> dùng cache. Hết hạn trong lúc nằm
+		// cache thì bỏ qua cache, query lại cho chắc.
+		if ( empty( $cached->expires_at ) || $cached->expires_at > $now_mysql ) {
 			return $cached;
 		}
 	}
 
-	$current_time = current_time( 'mysql' );
-	$ban_record   = false;
-
-	// Check user_id.
-	if ( $user_id ) {
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+	if ( $is_user ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ban_record = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
@@ -577,22 +688,12 @@ function init_plugin_suite_chat_engine_check_user_banned( $user_id = null, $ip_a
                  AND is_active = 1 
                  AND (expires_at IS NULL OR expires_at > %s) 
                  LIMIT 1",
-				$user_id,
-				$current_time
+				(int) $value,
+				$now_mysql
 			)
 		);
-
-		if ( $ban_record ) {
-			foreach ( $cache_keys as $key ) {
-				wp_cache_set( $key, $ban_record, $cache_group, $cache_ttl );
-			}
-			return $ban_record;
-		}
-	}
-
-	// Check IP.
-	if ( $ip_address ) {
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+	} else {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ban_record = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT * FROM `{$wpdb->prefix}init_chatbox_banned` 
@@ -600,23 +701,25 @@ function init_plugin_suite_chat_engine_check_user_banned( $user_id = null, $ip_a
                  AND is_active = 1 
                  AND (expires_at IS NULL OR expires_at > %s) 
                  LIMIT 1",
-				$ip_address,
-				$current_time
+				(string) $value,
+				$now_mysql
 			)
 		);
+	}
 
-		if ( $ban_record ) {
-			foreach ( $cache_keys as $key ) {
-				wp_cache_set( $key, $ban_record, $cache_group, $cache_ttl );
-			}
-			return $ban_record;
+	if ( $ban_record ) {
+		// Không giữ cache lâu hơn thời điểm ban hết hạn.
+		if ( ! empty( $ban_record->expires_at ) ) {
+			$seconds_left = strtotime( $ban_record->expires_at ) - strtotime( $now_mysql );
+			$cache_ttl    = (int) max( 1, min( $cache_ttl, $seconds_left ) );
 		}
+
+		wp_cache_set( $cache_key, $ban_record, $cache_group, $cache_ttl );
+		return $ban_record;
 	}
 
-	// Cache negative.
-	foreach ( $cache_keys as $key ) {
-		wp_cache_set( $key, false, $cache_group, $cache_ttl );
-	}
+	// Negative cache: dùng 'none' (KHÔNG dùng false - false trùng với cache miss).
+	wp_cache_set( $cache_key, 'none', $cache_group, $cache_ttl );
 
 	return false;
 }
@@ -700,8 +803,12 @@ function init_plugin_suite_chat_engine_check_rate_limit( $user_ip, $user_id = nu
 	$transient_key = 'init_chat_rate_limit_' . md5( $user_ip . ( $user_id ? '_' . $user_id : '' ) );
 	$attempts      = get_transient( $transient_key );
 
-	$options    = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, array() );
-	$rate_limit = isset( $options['rate_limit'] ) ? (int) $options['rate_limit'] : 10; // messages per minute.
+	// Đọc đúng option mà trang Settings lưu (trước 1.3.8 đọc nhầm option cũ nên giá
+	// trị admin cấu hình bị bỏ qua, luôn dùng mặc định 10 tin/phút).
+	$rate_limit = (int) init_plugin_suite_chat_engine_get_setting( 'rate_limit', 10 ); // messages per minute.
+	if ( $rate_limit < 1 ) {
+		$rate_limit = 1;
+	}
 
 	if ( false === $attempts ) {
 		set_transient( $transient_key, 1, 60 ); // 1 minute
@@ -800,7 +907,10 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
 		// frontend vẫn hiển thị tin cũ (đã cache) cho tới khi hết TTL. Xóa cả cache
 		// pinned_message vì tin đang ghim (nếu có) giờ cũng không còn tồn tại nữa.
 		init_plugin_suite_chat_engine_clear_message_cache();
-		wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+
+		// Bỏ ghim luôn: pinned dùng snapshot lưu riêng trong bảng stats nên nếu chỉ
+		// xóa cache, banner ghim vẫn hiện lại nội dung của tin đã bị xóa sạch.
+		init_plugin_suite_chat_engine_unpin_message();
 
 		// Ghi log (nếu WP_DEBUG bật).
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -904,6 +1014,25 @@ function init_plugin_suite_chat_engine_unpin_message() {
 	wp_cache_delete( 'pinned_message', 'init_chat_engine' );
 
 	return true;
+}
+
+/**
+ * Bỏ ghim nếu tin đang ghim nằm trong danh sách tin vừa bị admin xóa/ẩn.
+ *
+ * Tin ghim được lưu dạng snapshot (không query lại bảng messages), nên nếu không
+ * bỏ ghim thì nội dung tin đã bị xóa vẫn tiếp tục hiển thị trên banner. Chỉ gọi ở
+ * các thao tác xóa CHỦ ĐỘNG của admin (không gọi khi tự động cắt bớt tin cũ theo
+ * max_messages, để thông báo ghim lâu ngày không tự biến mất).
+ *
+ * @param int[] $message_ids IDs of the messages that were just deleted.
+ * @return void
+ */
+function init_plugin_suite_chat_engine_maybe_unpin_deleted( $message_ids ) {
+	$pinned_id = (int) init_plugin_suite_chat_engine_get_stat( 'pinned_message_id', 0 );
+
+	if ( $pinned_id > 0 && in_array( $pinned_id, array_map( 'intval', (array) $message_ids ), true ) ) {
+		init_plugin_suite_chat_engine_unpin_message();
+	}
 }
 
 /**

@@ -639,3 +639,81 @@ msgstr ""
 
 msgid "Messages per page"
 msgstr ""
+
+msgid "Name is too long (max 50 characters)."
+msgstr ""
+
+msgid "Failed to send message."
+msgstr ""
+
+msgid "Network error."
+msgstr ""
+
+msgid "Permission denied."
+msgstr ""
+
+msgid "You do not have permission to perform this action."
+msgstr ""
+
+msgid "Please select an action."
+msgstr ""
+
+msgid "Please select at least one item."
+msgstr ""
+
+msgid "Are you sure you want to delete the selected messages?"
+msgstr ""
+
+msgid "Are you sure you want to ban the selected users?"
+msgstr ""
+
+msgid "User:"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "%d users banned successfully."
+msgstr ""
+
+msgid "Total Messages"
+msgstr ""
+
+msgid "Expired"
+msgstr ""
+
+msgid "remaining"
+msgstr ""
+
+msgid "This will permanently delete ALL chat messages. Continue?"
+msgstr ""
+
+msgid "&laquo;"
+msgstr ""
+
+msgid "&raquo;"
+msgstr ""
+
+msgid "Pinned message"
+msgstr ""
+
+msgid "Pin"
+msgstr ""
+
+msgid "Unpin this message"
+msgstr ""
+
+msgid "Could not pin message. Please try again."
+msgstr ""
+
+msgid "Could not unpin message. Please try again."
+msgstr ""
+
+msgid "Pinned message is not loaded yet. Scroll up to load history."
+msgstr ""
+
+msgid "Connection error while pinning."
+msgstr ""
+
+msgid "Connection error while unpinning."
+msgstr ""
