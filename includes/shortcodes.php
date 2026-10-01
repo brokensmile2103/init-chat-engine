@@ -36,6 +36,10 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = array(), $conte
 		'init_chatbox'
 	);
 
+	// Tên theme được ghép vào đường dẫn file (template + CSS) nên chỉ cho phép
+	// chữ, số, "-" và "_" - chặn path traversal kiểu theme="../../..".
+	$atts['theme'] = init_plugin_suite_chat_engine_sanitize_theme_name( $atts['theme'] );
+
 	ob_start();
 
 	// Enqueue assets.
@@ -62,6 +66,18 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = array(), $conte
 }
 
 /**
+ * Sanitize a chatbox theme name used to build template/CSS file paths.
+ *
+ * @param string $theme Raw theme name from shortcode attributes.
+ * @return string Safe theme name, or 'default' when nothing valid remains.
+ */
+function init_plugin_suite_chat_engine_sanitize_theme_name( $theme ) {
+	$theme = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $theme );
+
+	return '' !== $theme ? $theme : 'default';
+}
+
+/**
  * Enqueue assets with enhanced options
  *
  * @param array $atts Shortcode attributes.
@@ -70,6 +86,12 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = array(), $conte
 function init_plugin_suite_chat_engine_enqueue_assets( $atts = array() ) {
 	// Get all settings from different groups.
 	$settings = init_plugin_suite_chat_engine_get_all_settings();
+
+	// Hàm này có thể được gọi trực tiếp từ theme (không qua shortcode) nên vẫn
+	// sanitize lại tên theme trước khi ghép vào đường dẫn file CSS.
+	if ( isset( $atts['theme'] ) ) {
+		$atts['theme'] = init_plugin_suite_chat_engine_sanitize_theme_name( $atts['theme'] );
+	}
 
 	// Enqueue CSS.
 	if ( empty( $settings['disable_css'] ) ) {
@@ -95,9 +117,12 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = array() ) {
 
 		// Custom CSS.
 		if ( ! empty( $settings['custom_css'] ) ) {
-			// Escape CSS để tránh XSS.
-			$safe_css = wp_strip_all_tags( $settings['custom_css'] );
-			wp_add_inline_style( 'init-chat-engine-style', esc_html( $safe_css ) );
+			// Chống XSS: bỏ mọi thẻ HTML và vô hiệu hóa chuỗi "</" để CSS không thể
+			// tự đóng thẻ <style>. Trước 1.3.8 dùng esc_html() - an toàn nhưng làm
+			// hỏng CSS hợp lệ (">" thành "&gt;", dấu nháy thành entity) nên các rule
+			// dùng selector con ">" hay content: "..." / font-family "..." bị bỏ qua.
+			$safe_css = str_replace( '</', '<\\/', wp_strip_all_tags( $settings['custom_css'] ) );
+			wp_add_inline_style( 'init-chat-engine-style', $safe_css );
 		}
 	}
 
@@ -150,6 +175,7 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = array() ) {
 		'i18n'                 => array(
 			'empty_message'       => __( 'No messages yet. Be the first to chat!', 'init-chat-engine' ),
 			'missing_name'        => __( 'Display name is required.', 'init-chat-engine' ),
+			'name_too_long'       => __( 'Name is too long (max 50 characters).', 'init-chat-engine' ),
 			'send_failed'         => __( 'Failed to send message.', 'init-chat-engine' ),
 			'network_error'       => __( 'Network error.', 'init-chat-engine' ),
 			'new_message'         => __( 'New messages', 'init-chat-engine' ),
@@ -260,31 +286,62 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = array() ) {
 
 	global $wpdb;
 
-	$show_items = array_map( 'trim', explode( ',', $atts['show'] ) );
-	$period     = absint( $atts['period'] );
+	$show_items  = array_map( 'trim', explode( ',', $atts['show'] ) );
+	$period      = absint( $atts['period'] );
+	$is_detailed = 'basic' !== $atts['type'];
+
+	// Shortcode này có thể nằm trên trang public (sidebar/footer) và trước đây chạy
+	// tới 6 query COUNT(*) cho MỖI lượt xem trang. Gom kết quả vào object cache ngắn
+	// hạn (1 phút) - số liệu thống kê không cần chính xác tới từng giây - và chỉ query
+	// những số thực sự được hiển thị theo type/show.
+	$cache_key = 'stats_shortcode_' . md5( $atts['type'] . '|' . $period . '|' . implode( ',', $show_items ) );
+	$stats     = wp_cache_get( $cache_key, 'init_chat_engine' );
+
+	if ( ! is_array( $stats ) ) {
+		$stats = array();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( in_array( 'messages', $show_items, true ) ) {
+			$stats['total_messages'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0" );
+
+			if ( $is_detailed ) {
+				$stats['recent_messages'] = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs 
+                         WHERE is_deleted = 0 AND created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+						$period
+					)
+				);
+			}
+		}
+
+		if ( in_array( 'users', $show_items, true ) ) {
+			$stats['total_users'] = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NOT NULL AND is_deleted = 0" );
+
+			if ( $is_detailed ) {
+				$stats['guest_messages'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NULL AND is_deleted = 0" );
+			}
+		}
+
+		if ( in_array( 'activity', $show_items, true ) && $is_detailed ) {
+			$stats['today_messages']     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = CURDATE() AND is_deleted = 0" );
+			$stats['yesterday_messages'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND is_deleted = 0" );
+		}
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		wp_cache_set( $cache_key, $stats, 'init_chat_engine', MINUTE_IN_SECONDS );
+	}
 
 	ob_start();
 	?>
 	<div class="init-chat-stats-widget init-chat-stats-<?php echo esc_attr( $atts['type'] ); ?>">
 		<?php if ( in_array( 'messages', $show_items, true ) ) : ?>
-			<?php
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$total_messages = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0" );
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$recent_messages = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs 
-                     WHERE is_deleted = 0 AND created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)",
-					$period
-				)
-			);
-			?>
 			<div class="init-chat-stat-item">
 				<span class="init-chat-stat-label"><?php esc_html_e( 'Total Messages:', 'init-chat-engine' ); ?></span>
-				<span class="init-chat-stat-value"><?php echo esc_html( number_format_i18n( $total_messages ) ); ?></span>
-				<?php if ( 'basic' !== $atts['type'] ) : ?>
+				<span class="init-chat-stat-value"><?php echo esc_html( number_format_i18n( $stats['total_messages'] ) ); ?></span>
+				<?php if ( $is_detailed ) : ?>
 					<small class="init-chat-stat-detail">
-						(<?php echo esc_html( number_format_i18n( $recent_messages ) ); ?>
+						(<?php echo esc_html( number_format_i18n( $stats['recent_messages'] ) ); ?>
 						<?php
 						/* translators: %d: number of days */
 						printf( esc_html__( 'in last %d days', 'init-chat-engine' ), esc_html( $period ) );
@@ -296,36 +353,24 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = array() ) {
 		<?php endif; ?>
 		
 		<?php if ( in_array( 'users', $show_items, true ) ) : ?>
-			<?php
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$total_users = $wpdb->get_var( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NOT NULL AND is_deleted = 0" );
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$guest_messages = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NULL AND is_deleted = 0" );
-			?>
 			<div class="init-chat-stat-item">
 				<span class="init-chat-stat-label"><?php esc_html_e( 'Active Users:', 'init-chat-engine' ); ?></span>
-				<span class="init-chat-stat-value"><?php echo esc_html( number_format_i18n( $total_users ) ); ?></span>
-				<?php if ( 'basic' !== $atts['type'] ) : ?>
+				<span class="init-chat-stat-value"><?php echo esc_html( number_format_i18n( $stats['total_users'] ) ); ?></span>
+				<?php if ( $is_detailed ) : ?>
 					<small class="init-chat-stat-detail">
-						(<?php echo esc_html( number_format_i18n( $guest_messages ) ); ?> 
+						(<?php echo esc_html( number_format_i18n( $stats['guest_messages'] ) ); ?> 
 						<?php esc_html_e( 'guest messages', 'init-chat-engine' ); ?>)
 					</small>
 				<?php endif; ?>
 			</div>
 		<?php endif; ?>
 		
-		<?php if ( in_array( 'activity', $show_items, true ) && 'basic' !== $atts['type'] ) : ?>
-			<?php
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$today_messages = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = CURDATE() AND is_deleted = 0" );
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$yesterday_messages = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND is_deleted = 0" );
-			?>
+		<?php if ( in_array( 'activity', $show_items, true ) && $is_detailed ) : ?>
 			<div class="init-chat-stat-item">
 				<span class="init-chat-stat-label"><?php esc_html_e( 'Today:', 'init-chat-engine' ); ?></span>
-				<span class="init-chat-stat-value"><?php echo esc_html( number_format_i18n( $today_messages ) ); ?></span>
+				<span class="init-chat-stat-value"><?php echo esc_html( number_format_i18n( $stats['today_messages'] ) ); ?></span>
 				<small class="init-chat-stat-detail">
-					(<?php esc_html_e( 'Yesterday:', 'init-chat-engine' ); ?> <?php echo esc_html( number_format_i18n( $yesterday_messages ) ); ?>)
+					(<?php esc_html_e( 'Yesterday:', 'init-chat-engine' ); ?> <?php echo esc_html( number_format_i18n( $stats['yesterday_messages'] ) ); ?>)
 				</small>
 			</div>
 		<?php endif; ?>

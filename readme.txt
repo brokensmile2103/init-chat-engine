@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.7
+Stable tag: 1.3.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -109,6 +109,11 @@ Extend chat message data (add flags, metadata, user info, etc.).
 **Applies to:** Backend DB → JSON output  
 **Params:** `array $message_row`, `WP_User|null $user`
 
+**`init_plugin_suite_chat_engine_ip_headers`**  
+Choose which `$_SERVER` keys are trusted (in priority order) when detecting the visitor IP used for bans and rate limiting. Default keeps the existing list (Cloudflare / proxy headers first, then `REMOTE_ADDR`). Sites not behind a proxy or CDN can return `array( 'REMOTE_ADDR' )` to prevent spoofed `X-Forwarded-For` headers from bypassing IP bans.  
+**Applies to:** Ban check, rate limiting, message logging  
+**Params:** `array $ip_keys`
+
 == Screenshots ==
 
 1. Admin settings panel - Basic configuration
@@ -150,6 +155,33 @@ Yes, the plugin is fully translation-ready with Vietnamese translation included.
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.8 – October 1, 2026 =
+- Fix: the **Rate Limiting** setting was ignored — the limit was read from a legacy option the Settings page no longer writes to, so every site was silently limited to the default 10 messages/minute regardless of what the admin configured. The saved value is now honored (sites that never saved Security settings keep the previous default of 10)
+- Fix: the daily cleanup cron (and the "Run Cleanup Now" button) had the same problem with **Maximum Messages** and **Automatic Cleanup** days — it always used the defaults (1000 / 30 days). It now uses the configured values
+- Fix: maximum message length was counted in bytes instead of characters, so Vietnamese / accented / emoji messages were rejected well before the configured limit even though the on-screen counter still showed room left. Length is now counted in characters, matching the counter and the setting's description
+- Fix: using a custom container ID (`[init_chatbox id="..."]`) stopped the chat from loading at all — the script only looked for the default `init-chatbox-root` ID
+- Fix: on sites using the **Plain** permalink structure (REST URLs of the form `index.php?rest_route=...`) the chat never loaded any messages — the script appended its parameters with a second `?`, producing an invalid URL (HTTP 404). Query parameters are now appended correctly for both permalink styles
+- Fix: Custom CSS containing `>` child selectors or quotes (e.g. `content: "..."`, `font-family: "..."`) was broken by HTML-escaping on output. CSS is now output intact while still stripping HTML tags and neutralizing `</` so it cannot break out of the `<style>` tag
+- Fix: after **Delete All Messages** (or deleting the pinned message from the Management page / moderation endpoint), the pinned banner kept showing the deleted message because it renders from a stored snapshot. Admin deletions now unpin it too (automatic trimming of old messages by the Maximum Messages limit does not unpin)
+- Fix: unbanning by user ID / IP (without a ban ID) did not clear the ban cache, so the user could stay blocked until the cache expired; cached temporary bans also never outlive their expiry time now
+- Fix: validation error for **Minimum Account Age** (over 3650 days) was never displayed because it was added after the settings error notice had already been registered
+- Fix: the "has messages" flag used to size the empty chatbox was cached for a day and never invalidated, so a freshly used chat could keep its "empty" layout
+- Fix: the admin message list could show stale data for up to 5 minutes (new messages missing, wrong page size after changing Screen Options) on hosts with a persistent object cache. The list cache is now versioned and invalidated on every message change
+- Fix: uninstalling the plugin left the `init_chatbox_stats` and `init_chatbox_banned` tables, settings options, the cleanup cron event and per-user Screen Options behind. Uninstall now removes all plugin data
+- Security: hardened HTML escaping in the chat script — the previous helper did not escape quotes, so a crafted display name or same-site link inside a message could break out of an HTML attribute (stored XSS). Quotes are now escaped everywhere user content is placed into the chat markup
+- Security: the `theme` shortcode attribute is now restricted to letters, numbers, `-` and `_` before being used in template / stylesheet paths, preventing path traversal (e.g. `theme="../../.."`)
+- Security: `GET /user-status` no longer exposes the full ban record (banning admin's user ID, stored IP address); `ban_info` now contains only `reason`, `banned_at` and `expires_at`
+- Security: added the `init_plugin_suite_chat_engine_ip_headers` filter so sites not behind a proxy/CDN can trust only `REMOTE_ADDR`, preventing spoofed forwarding headers from bypassing IP bans and rate limits. Default behavior is unchanged
+- Performance: the "not banned" result was never actually served from cache (the negative cache stored `false`, which is indistinguishable from a cache miss), so every poll from every client queried the ban table 1–2 times. It is now cached correctly — on hosts with a persistent object cache most polls no longer touch the ban table at all
+- Performance: sending a message now updates the `total_messages` / `messages_today` counters with a single atomic query each instead of a read + write pair, which also fixes lost increments when several messages are sent at the same moment
+- Performance: removed a duplicate REST request on every page load (a separate `?limit=1` call only used to read the pinned message, which the initial message load already returns)
+- Performance: the Management message list no longer runs ban-check and user lookups per row (previously up to 2 queries + 1 user lookup for each of the 20–200 rows); bans and users are preloaded once per page. Bulk delete now runs a single query instead of one per selected message
+- Performance: `[init_chat_stats]` results are cached for 1 minute and only the numbers actually displayed are queried (previously up to 6 `COUNT(*)` queries on every page view)
+- Performance: the chat script no longer forces a style/layout recalculation every time it hides an element, and mouse-move activity tracking is throttled to once per second
+- Performance: the visitor IP is resolved once per request instead of on every ban / rate-limit / logging call
+- New translatable string: "Name is too long (max 50 characters)." (Vietnamese translation updated)
+- No changes to database schema, REST routes, or the message response shape used by third-party integrations
 
 = 1.3.7 – August 21, 2026 =
 - Fix: intermittent missing messages on the frontend chat under concurrent traffic — a race condition in the `GET /messages` polling cache could cause a newly sent message to be silently hidden from all clients until a *later* message triggered a cache clear (symptom: 2nd message never appears, then sending a 3rd makes both appear together; refreshing the page also "fixes" it since page load uses a separate, unaffected cache path). Only reproduces on hosts with a persistent object cache (Redis/Memcached/etc.) under concurrent request timing; does not affect message storage — only what polling clients see, and only temporarily

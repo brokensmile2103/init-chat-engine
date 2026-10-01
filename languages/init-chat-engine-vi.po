@@ -669,3 +669,57 @@ msgstr "Vi phạm quy tắc chat"
 
 msgid "Messages per page"
 msgstr "Số tin trên một trang"
+
+msgid "Name is too long (max 50 characters)."
+msgstr "Tên quá dài (tối đa 50 ký tự)."
+
+msgid "Failed to send message."
+msgstr "Gửi tin nhắn thất bại."
+
+msgid "Network error."
+msgstr "Lỗi mạng."
+
+msgid "Permission denied."
+msgstr "Không có quyền truy cập."
+
+msgid "You do not have permission to perform this action."
+msgstr "Bạn không có quyền thực hiện thao tác này."
+
+msgid "Please select an action."
+msgstr "Vui lòng chọn một hành động."
+
+msgid "Please select at least one item."
+msgstr "Vui lòng chọn ít nhất một mục."
+
+msgid "Are you sure you want to delete the selected messages?"
+msgstr "Bạn có chắc muốn xóa các tin nhắn đã chọn?"
+
+msgid "Are you sure you want to ban the selected users?"
+msgstr "Bạn có chắc muốn cấm các người dùng đã chọn?"
+
+msgid "User:"
+msgstr "Người dùng:"
+
+msgid "Cancel"
+msgstr "Hủy"
+
+msgid "%d users banned successfully."
+msgstr "Đã cấm thành công %d người dùng."
+
+msgid "Total Messages"
+msgstr "Tổng tin nhắn"
+
+msgid "Expired"
+msgstr "Đã hết hạn"
+
+msgid "remaining"
+msgstr "còn lại"
+
+msgid "This will permanently delete ALL chat messages. Continue?"
+msgstr "Thao tác này sẽ xóa vĩnh viễn TOÀN BỘ tin nhắn chat. Tiếp tục?"
+
+msgid "&laquo;"
+msgstr "&laquo;"
+
+msgid "&raquo;"
+msgstr "&raquo;"

@@ -136,25 +136,30 @@ function init_plugin_suite_chat_engine_render_management_page() {
 		if ( ! empty( $selected_items ) ) {
 			switch ( $action ) {
 				case 'bulk_delete':
-					$deleted_count = 0;
-					foreach ( $selected_items as $message_id ) {
-						global $wpdb;
-                        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-						$result = $wpdb->update(
-							$wpdb->prefix . 'init_chatbox_msgs',
-							array( 'is_deleted' => 1 ),
-							array( 'id' => $message_id ),
-							array( '%d' ),
-							array( '%d' )
+					global $wpdb;
+
+					// 1 query UPDATE ... WHERE id IN (...) thay vì 1 query cho mỗi tin.
+					$selected_items = array_values( array_unique( array_filter( $selected_items ) ) );
+					$deleted_count  = 0;
+
+					if ( ! empty( $selected_items ) ) {
+						$placeholders = implode( ', ', array_fill( 0, count( $selected_items ), '%d' ) );
+
+						// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $placeholders chỉ gồm chuỗi '%d' do code tự sinh, giá trị thật được bind qua prepare().
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+						$deleted_count = (int) $wpdb->query(
+							$wpdb->prepare(
+								"UPDATE `{$wpdb->prefix}init_chatbox_msgs` SET is_deleted = 1 WHERE is_deleted = 0 AND id IN ( {$placeholders} )",
+								$selected_items
+							)
 						);
-						if ( $result ) {
-							++$deleted_count;
-						}
+						// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 					}
 
 					// Fix: clear cache sau khi xóa.
 					if ( $deleted_count > 0 ) {
 						init_plugin_suite_chat_engine_clear_message_cache();
+						init_plugin_suite_chat_engine_maybe_unpin_deleted( $selected_items );
 					}
 
 					echo '<div class="notice notice-success"><p>' .
@@ -256,6 +261,7 @@ function init_plugin_suite_chat_engine_render_management_page() {
 					if ( $result ) {
 						// Fix: clear cache sau khi xóa.
 						init_plugin_suite_chat_engine_clear_message_cache();
+						init_plugin_suite_chat_engine_maybe_unpin_deleted( array( $message_id ) );
 						echo '<div class="notice notice-success"><p>' . esc_html__( 'Message deleted successfully.', 'init-chat-engine' ) . '</p></div>';
 					} else {
 						echo '<div class="notice notice-error"><p>' . esc_html__( 'Failed to delete message.', 'init-chat-engine' ) . '</p></div>';
@@ -352,8 +358,11 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 		}
 	}
 
+	// Salt đổi mỗi khi dữ liệu tin nhắn đổi -> toàn bộ cache cũ tự hết hiệu lực.
+	$cache_salt = init_plugin_suite_chat_engine_get_admin_cache_salt();
+
 	// Get total count.
-	$cache_key   = 'init_chat_total_messages_' . md5( $search );
+	$cache_key   = 'init_chat_total_messages_' . md5( $search . '|' . $cache_salt );
 	$total_items = wp_cache_get( $cache_key );
 	if ( false === $total_items ) {
 		if ( $search ) {
@@ -384,7 +393,8 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 	$total_pages = ceil( $total_items / $per_page );
 
 	// Get messages.
-	$cache_key_messages = 'init_chat_messages_' . md5( $search . $current_page );
+	// Có cả per_page trong key: đổi Screen Options thì không dùng nhầm cache cũ.
+	$cache_key_messages = 'init_chat_messages_' . md5( $search . '|' . $current_page . '|' . $per_page . '|' . $cache_salt );
 	$messages           = wp_cache_get( $cache_key_messages );
 	if ( false === $messages ) {
 		if ( $search ) {
@@ -420,6 +430,45 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 		}
 		wp_cache_set( $cache_key_messages, $messages, '', 300 ); // Cache for 5 minutes.
 	}
+
+	// Nạp sẵn dữ liệu dùng cho từng dòng bằng vài query gộp, thay vì query lặp lại
+	// trong vòng foreach (N+1): user object (cache_users) + danh sách ban đang hiệu lực.
+	$row_user_ids    = array();
+	$banned_user_ids = array();
+	$banned_ips      = array();
+
+	if ( ! empty( $messages ) ) {
+		foreach ( $messages as $message ) {
+			if ( $message->user_id ) {
+				$row_user_ids[] = (int) $message->user_id;
+			}
+		}
+
+		if ( ! empty( $row_user_ids ) ) {
+			cache_users( array_unique( $row_user_ids ) );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$active_bans = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT user_id, ip_address FROM `{$wpdb->prefix}init_chatbox_banned` 
+                 WHERE is_active = 1 
+                 AND (expires_at IS NULL OR expires_at > %s)",
+				current_time( 'mysql' )
+			)
+		);
+
+		foreach ( (array) $active_bans as $ban ) {
+			if ( $ban->user_id ) {
+				$banned_user_ids[ (int) $ban->user_id ] = true;
+			}
+			if ( $ban->ip_address ) {
+				$banned_ips[ $ban->ip_address ] = true;
+			}
+		}
+	}
+
+	$row_nonce = wp_create_nonce( 'init_chat_management' );
 	?>
 	<div class="tablenav top">
 		<div class="alignleft actions">
@@ -538,7 +587,11 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 						<code><?php echo esc_html( $message->ip_address ? $message->ip_address : __( 'N/A', 'init-chat-engine' ) ); ?></code>
 					</td>
 					<td>
-						<?php $nonce = wp_create_nonce( 'init_chat_management' ); ?>
+						<?php
+						$nonce     = $row_nonce;
+						$is_banned = ( $message->user_id && isset( $banned_user_ids[ (int) $message->user_id ] ) )
+							|| ( $message->ip_address && isset( $banned_ips[ $message->ip_address ] ) );
+						?>
 						<div class="row-actions">
 							<span class="delete">
 								<a href="
@@ -559,7 +612,7 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 								</a>
 							</span>
 							
-							<?php if ( ! init_plugin_suite_chat_engine_check_user_banned( $message->user_id, $message->ip_address ) ) : ?>
+							<?php if ( ! $is_banned ) : ?>
 								| <span class="ban">
 									<a href="
 									<?php

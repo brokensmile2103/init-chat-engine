@@ -77,15 +77,74 @@ function init_plugin_suite_chat_engine_check_account_age_requirement() {
 }
 
 /**
+ * Get a single setting value.
+ *
+ * Đọc từ các nhóm option mà trang Settings thực sự lưu (init_chat_*_settings), có
+ * fallback sang option cũ INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION cho site nâng cấp từ
+ * bản rất cũ (khi đó admin chưa từng lưu lại Settings), cuối cùng mới tới mặc định.
+ *
+ * @param string $key           Setting key.
+ * @param mixed  $default_value Value returned when the setting isn't saved anywhere.
+ * @return mixed
+ */
+function init_plugin_suite_chat_engine_get_setting( $key, $default_value = null ) {
+	$settings = init_plugin_suite_chat_engine_get_all_settings();
+
+	if ( isset( $settings[ $key ] ) ) {
+		return $settings[ $key ];
+	}
+
+	$legacy = get_option( INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION, array() );
+
+	if ( is_array( $legacy ) && isset( $legacy[ $key ] ) ) {
+		return $legacy[ $key ];
+	}
+
+	return $default_value;
+}
+
+/**
+ * Lấy "phiên bản" hiện tại của cache trang quản trị tin nhắn.
+ *
+ * Giá trị này được ghép vào cache key danh sách/tổng số tin ở trang Management.
+ * Mỗi khi dữ liệu tin nhắn đổi chỉ cần đổi giá trị này (1 lần ghi cache) là toàn
+ * bộ cache cũ - mọi trang, mọi từ khóa tìm kiếm, mọi tùy chọn per_page - tự động
+ * bị bỏ qua, thay vì phải đoán và xóa từng key như trước.
+ *
+ * @return string
+ */
+function init_plugin_suite_chat_engine_get_admin_cache_salt() {
+	$salt = wp_cache_get( 'admin_last_changed', 'init_chat_engine' );
+
+	if ( false === $salt ) {
+		$salt = microtime();
+		wp_cache_set( 'admin_last_changed', $salt, 'init_chat_engine' );
+	}
+
+	return (string) $salt;
+}
+
+/**
+ * Vô hiệu hóa toàn bộ cache danh sách tin nhắn ở trang quản trị.
+ *
+ * @return void
+ */
+function init_plugin_suite_chat_engine_bump_admin_cache() {
+	wp_cache_set( 'admin_last_changed', microtime(), 'init_chat_engine' );
+}
+
+/**
  * Clear all message-related cache
  */
 function init_plugin_suite_chat_engine_clear_message_cache() {
-	// 1. Xóa thủ công cache phân trang tin nhắn (group '')
+	// 1. Cache danh sách + tổng số tin ở trang quản trị (mọi trang / từ khóa / per_page).
+	init_plugin_suite_chat_engine_bump_admin_cache();
+
+	// Key cũ (trước 1.3.8, không có salt) - vẫn xóa để không sót dữ liệu cũ còn
+	// nằm trong persistent object cache ngay sau khi nâng cấp.
 	for ( $page = 1; $page <= 10; $page++ ) {
 		wp_cache_delete( 'init_chat_messages_' . md5( (string) $page ), '' );
 	}
-
-	// Đưa ra ngoài vòng lặp để chỉ xóa đúng 1 lần, đỡ spam Object Cache 10 lần bro nhé.
 	wp_cache_delete( 'init_chat_total_messages_' . md5( '' ), '' );
 
 	// 2. Xóa các cache thống kê (group '')
@@ -113,4 +172,21 @@ function init_plugin_suite_chat_engine_clear_frontend_message_cache() {
 
 	wp_cache_delete( 'frontend_latest_id', $cache_group );
 	wp_cache_delete( 'frontend_latest_messages', $cache_group );
+
+	// Cờ "có tin nhắn hay chưa" (quyết định class expand/shrink của khung chat khi
+	// render shortcode) - trước đây cache 1 ngày mà không bao giờ bị xóa, nên khung
+	// chat có thể giữ trạng thái "rỗng" cả ngày dù đã có tin mới.
+	wp_cache_delete( 'has_messages', $cache_group );
+}
+
+/**
+ * Multibyte-safe string length (đếm theo ký tự UTF-8, không phải byte).
+ *
+ * @param string $text Text to measure.
+ * @return int
+ */
+function init_plugin_suite_chat_engine_strlen( $text ) {
+	$text = (string) $text;
+
+	return function_exists( 'mb_strlen' ) ? mb_strlen( $text, 'UTF-8' ) : strlen( $text );
 }
