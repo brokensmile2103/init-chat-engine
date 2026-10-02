@@ -31,6 +31,9 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = array(), $conte
 			'title'           => '',
 			'class'           => '',
 			'id'              => '',
+			'room'            => '',
+			'allow_guests'    => '',
+			'max_messages'    => '',
 		),
 		$atts,
 		'init_chatbox'
@@ -39,6 +42,10 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = array(), $conte
 	// Tên theme được ghép vào đường dẫn file (template + CSS) nên chỉ cho phép
 	// chữ, số, "-" và "_" - chặn path traversal kiểu theme="../../..".
 	$atts['theme'] = init_plugin_suite_chat_engine_sanitize_theme_name( $atts['theme'] );
+
+	// Phòng chat (1.3.9): bỏ trống = phòng mặc định (khung chat chung như trước).
+	$atts['room'] = init_plugin_suite_chat_engine_sanitize_room( $atts['room'] );
+	init_plugin_suite_chat_engine_register_room_from_shortcode( $atts );
 
 	ob_start();
 
@@ -63,6 +70,46 @@ function init_plugin_suite_chat_engine_render_shortcode( $atts = array(), $conte
 	}
 
 	return ob_get_clean();
+}
+
+/**
+ * Ghi nhận phòng + cấu hình riêng (allow_guests / max_messages) từ shortcode.
+ *
+ * Chỉ ghi khi shortcode được render ở ngữ cảnh đáng tin cậy: nội dung đã xuất bản
+ * (hoặc template/widget của theme), không phải bản xem trước. Nhờ vậy cộng tác viên
+ * (Contributor) không thể dùng bản nháp / preview để tự đổi quyền khách hay giới
+ * hạn tin nhắn của 1 phòng đang chạy.
+ *
+ * @param array $atts Parsed shortcode attributes (room đã sanitize).
+ * @return void
+ */
+function init_plugin_suite_chat_engine_register_room_from_shortcode( $atts ) {
+	if ( is_admin() || is_preview() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		return;
+	}
+
+	$post = get_post();
+	if ( $post && 'publish' !== get_post_status( $post ) ) {
+		return;
+	}
+
+	$allow_guests = '';
+	if ( '' !== (string) $atts['allow_guests'] ) {
+		$allow_guests = filter_var( $atts['allow_guests'], FILTER_VALIDATE_BOOLEAN ) ? '1' : '0';
+	}
+
+	$max_messages = absint( $atts['max_messages'] );
+	if ( $max_messages > 0 ) {
+		$max_messages = max( 10, min( 10000, $max_messages ) );
+	}
+
+	init_plugin_suite_chat_engine_register_room(
+		$atts['room'],
+		array(
+			'allow_guests' => $allow_guests,
+			'max_messages' => $max_messages,
+		)
+	);
 }
 
 /**
@@ -138,6 +185,8 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = array() ) {
 	// Prepare localized data.
 	$site_icon_url = function_exists( 'get_site_icon_url' ) ? get_site_icon_url() : '';
 	$current_user  = wp_get_current_user();
+	$room          = isset( $atts['room'] ) ? init_plugin_suite_chat_engine_sanitize_room( $atts['room'] ) : '';
+	$room_config   = init_plugin_suite_chat_engine_get_room_config( $room );
 
 	// Override settings with shortcode attributes if provided.
 	$show_avatars = ! empty( $atts['show_avatars'] ) ?
@@ -155,7 +204,9 @@ function init_plugin_suite_chat_engine_enqueue_assets( $atts = array() ) {
 		'current_user'         => $current_user->exists() ? $current_user->display_name : '',
 		'current_user_id'      => $current_user->exists() ? $current_user->ID : 0,
 		'user_avatar'          => $current_user->exists() ? get_avatar_url( $current_user->ID, array( 'size' => 64 ) ) : '',
-		'allow_guests'         => ! empty( $settings['allow_guests'] ),
+		'allow_guests'         => $room_config['allow_guests'],
+		'room'                 => $room,
+		'room_token'           => init_plugin_suite_chat_engine_get_room_token( $room ),
 		'enable_notifications' => ! empty( $settings['enable_notifications'] ),
 		'enable_sounds'        => ! empty( $settings['enable_sounds'] ),
 		'show_avatars'         => $show_avatars,
@@ -275,6 +326,7 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = array() ) {
 			'type'   => 'basic', // basic, detailed, chart.
 			'period' => '30', // days.
 			'show'   => 'messages,users', // comma-separated: messages,users,activity.
+			'room'   => '', // để trống = thống kê tất cả các phòng (như trước 1.3.9).
 		),
 		$atts,
 		'init_chat_stats'
@@ -289,12 +341,18 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = array() ) {
 	$show_items  = array_map( 'trim', explode( ',', $atts['show'] ) );
 	$period      = absint( $atts['period'] );
 	$is_detailed = 'basic' !== $atts['type'];
+	$stats_room  = init_plugin_suite_chat_engine_sanitize_room( $atts['room'] );
+
+	// Lọc theo phòng bằng điều kiện "( 1 = %d OR room = %s )": giá trị luôn được bind
+	// qua $wpdb->prepare(); khi không truyền room thì vế đầu đúng -> mọi phòng.
+	$has_room  = '' !== (string) $atts['room'];
+	$all_rooms = $has_room ? 0 : 1;
 
 	// Shortcode này có thể nằm trên trang public (sidebar/footer) và trước đây chạy
 	// tới 6 query COUNT(*) cho MỖI lượt xem trang. Gom kết quả vào object cache ngắn
 	// hạn (1 phút) - số liệu thống kê không cần chính xác tới từng giây - và chỉ query
 	// những số thực sự được hiển thị theo type/show.
-	$cache_key = 'stats_shortcode_' . md5( $atts['type'] . '|' . $period . '|' . implode( ',', $show_items ) );
+	$cache_key = 'stats_shortcode_' . md5( $atts['type'] . '|' . $period . '|' . implode( ',', $show_items ) . '|' . ( $has_room ? 'room:' . $stats_room : 'all' ) );
 	$stats     = wp_cache_get( $cache_key, 'init_chat_engine' );
 
 	if ( ! is_array( $stats ) ) {
@@ -302,13 +360,15 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = array() ) {
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		if ( in_array( 'messages', $show_items, true ) ) {
-			$stats['total_messages'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0" );
+			$stats['total_messages'] = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0 AND ( 1 = %d OR room = %s )", $all_rooms, $stats_room ) );
 
 			if ( $is_detailed ) {
 				$stats['recent_messages'] = (int) $wpdb->get_var(
 					$wpdb->prepare(
 						"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs 
-                         WHERE is_deleted = 0 AND created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+                         WHERE is_deleted = 0 AND ( 1 = %d OR room = %s ) AND created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+						$all_rooms,
+						$stats_room,
 						$period
 					)
 				);
@@ -316,16 +376,16 @@ function init_plugin_suite_chat_engine_stats_shortcode( $atts = array() ) {
 		}
 
 		if ( in_array( 'users', $show_items, true ) ) {
-			$stats['total_users'] = (int) $wpdb->get_var( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NOT NULL AND is_deleted = 0" );
+			$stats['total_users'] = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT user_id) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NOT NULL AND is_deleted = 0 AND ( 1 = %d OR room = %s )", $all_rooms, $stats_room ) );
 
 			if ( $is_detailed ) {
-				$stats['guest_messages'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NULL AND is_deleted = 0" );
+				$stats['guest_messages'] = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE user_id IS NULL AND is_deleted = 0 AND ( 1 = %d OR room = %s )", $all_rooms, $stats_room ) );
 			}
 		}
 
 		if ( in_array( 'activity', $show_items, true ) && $is_detailed ) {
-			$stats['today_messages']     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = CURDATE() AND is_deleted = 0" );
-			$stats['yesterday_messages'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND is_deleted = 0" );
+			$stats['today_messages']     = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = CURDATE() AND is_deleted = 0 AND ( 1 = %d OR room = %s )", $all_rooms, $stats_room ) );
+			$stats['yesterday_messages'] = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND is_deleted = 0 AND ( 1 = %d OR room = %s )", $all_rooms, $stats_room ) );
 		}
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 

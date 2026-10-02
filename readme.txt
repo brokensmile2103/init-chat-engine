@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.8
+Stable tag: 1.3.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -24,6 +24,7 @@ GitHub repository: [https://github.com/brokensmile2103/init-chat-engine](https:/
 - Built with 100% REST API and Vanilla JS
 - No jQuery, no bloat – blazing fast
 - Fully embeddable via `[init_chatbox]` shortcode
+- Multiple chat rooms via `[init_chatbox room="..."]` – each room has its own messages, pinned message and limits
 - Guest messaging support (optional)
 - Smart polling system (adaptive 3.5–10s based on activity, up to 20s when the chatbox is scrolled out of view)
 - Browser notifications when new messages arrive
@@ -77,8 +78,17 @@ Shortcode `[init_chatbox]` supports the following attributes:
 - `title` - Add custom chat title
 - `class` - Add custom CSS classes
 - `id` - Set custom container ID
+- `room` - Chat room name (letters, numbers, `-` and `_`). Leave empty for the default room (the main chat, which keeps all existing messages). Each room has its own messages, pinned message and message limit (e.g. `room="vip"`)
+- `allow_guests` - Per-room override of the "Allow guests" setting (`yes`/`no`)
+- `max_messages` - Per-room override of the "Maximum Messages" setting (10–10,000)
 
 Example: `[init_chatbox height="500px" title="Community Chat" theme="modern"]`
+
+Room example: `[init_chatbox room="members" title="Members Lounge" allow_guests="no" max_messages="500"]`
+
+Only one chatbox per page is supported. Room overrides (`allow_guests`, `max_messages`) are saved when the shortcode is displayed on published content (not in drafts or previews), so use the same attributes everywhere a room is embedded.
+
+Shortcode `[init_chat_stats]` also accepts `room` to show statistics for a single room (e.g. `[init_chat_stats room="vip"]`); without it, all rooms are counted.
 
 == Filters for Developers ==
 
@@ -108,6 +118,11 @@ Triggered when a word filter rule blocks a message.
 Extend chat message data (add flags, metadata, user info, etc.).  
 **Applies to:** Backend DB → JSON output  
 **Params:** `array $message_row`, `WP_User|null $user`
+
+**`init_plugin_suite_chat_engine_message_saved`** *(action)*  
+Fired after a message is stored.  
+**Applies to:** POST /send  
+**Params:** `int $message_id`, `string $message`, `int|null $user_id`, `string $display_name`, `string $room` (added in 1.3.9; `''` = default room)
 
 **`init_plugin_suite_chat_engine_ip_headers`**  
 Choose which `$_SERVER` keys are trusted (in priority order) when detecting the visitor IP used for bans and rate limiting. Default keeps the existing list (Cloudflare / proxy headers first, then `REMOTE_ADDR`). Sites not behind a proxy or CDN can return `array( 'REMOTE_ADDR' )` to prevent spoofed `X-Forwarded-For` headers from bypassing IP bans.  
@@ -151,10 +166,28 @@ Yes, use the Rate Limiting setting to control how many messages users can send p
 = Is it translation-ready? =  
 Yes, the plugin is fully translation-ready with Vietnamese translation included. All text strings use proper WordPress internationalization functions.
 
+= Can I have several chat rooms? =  
+Yes (since 1.3.9). Add the `room` attribute: `[init_chatbox room="vip"]`. Rooms are created automatically from the shortcode and every room is isolated: messages, pinned message and message limit. The room name is signed by the server, so visitors cannot post into rooms that don't exist on your site. Bans, rate limiting, word filtering and account age rules are shared by all rooms. Manage rooms under `Chat Engine → Management` (room filter on Recent Messages and Statistics, plus a Chat Rooms overview).
+
 = How do I backup chat data? =  
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.9 – October 2, 2026 =
+- Fix: open chat tabs could get stuck and stop receiving new messages until the page was reloaded (polling kept requesting the same `after_id`), on sites with a persistent object cache such as Redis or Memcached. A slow poll request that read the database just before a new message was sent could write its outdated "latest message ID" into the shared cache *after* the new message had cleared it, so every client already at that ID was told there was nothing new. Frontend cache entries are now tagged with a generation token that changes on every message change, so a late write can never hide newer messages. Reproduced and verified fixed against a real Redis object cache under concurrent requests
+- Fix: `GET /messages` and `GET /user-status` now send `no-cache` headers (plus `X-LiteSpeed-Cache-Control: no-cache`), and the chat script fetches with `cache: 'no-store'`, so page caches / CDNs (LiteSpeed Cache "Cache REST API", Cloudflare, Varnish, Nginx FastCGI cache) and the browser can no longer serve an old empty polling response for the same URL
+- Fix: a request that hung (e.g. after the computer woke from sleep or switched networks) blocked all later polls forever because polling skips while a request is still pending. Requests now time out after 20 seconds and polling resumes automatically
+- Performance: "no new messages" polls are cached safely again (1.3.7 had to disable this to avoid the race above): idle polls on a site with a persistent object cache no longer touch the database at all
+- New: multiple chat rooms. Add `room="..."` to `[init_chatbox]` to create an isolated room with its own messages, pinned message and message limit. Existing messages stay in the default room, so current chatboxes are unchanged (the `id` attribute is still only the HTML container ID)
+- New: room names are signed (HMAC) by the server and printed into the page, so the REST API only accepts rooms that come from a shortcode on your site — nobody can create or spam hidden rooms. Works with page caching
+- New: per-room shortcode overrides `allow_guests="yes|no"` and `max_messages="..."` (only saved from published content, so contributors cannot change a room's rules through drafts or previews)
+- New: Management → Recent Messages has a room filter and a Room column; Management → Statistics can be filtered by room and lists all rooms (message count, last activity, guest access, message limit) with a "Delete Room Messages" action
+- New: `[init_chat_stats room="..."]` shows statistics for a single room
+- New: the "Maximum Messages" limit and the daily cleanup now apply per room
+- Developer: `init_plugin_suite_chat_engine_message_saved` now receives the room as a 5th argument; `GET /messages` and `POST /send` responses include `room`
+- Database: adds a `room` column and a `(room, is_deleted, id)` index to the messages table. The upgrade runs automatically on the first request after updating (also on the frontend, not only in wp-admin) and does not touch existing data
+- New translatable strings for rooms (Vietnamese translation updated)
 
 = 1.3.8 – October 1, 2026 =
 - Fix: the **Rate Limiting** setting was ignored — the limit was read from a legacy option the Settings page no longer writes to, so every site was silently limited to the default 10 messages/minute regardless of what the admin configured. The saved value is now honored (sites that never saved Security settings keep the previous default of 10)

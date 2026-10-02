@@ -55,7 +55,7 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
 						return is_numeric( $param ) && $param > 0 && $param <= 50;
 					},
 				),
-			),
+			) + init_plugin_suite_chat_engine_room_rest_args(),
 		)
 	);
 
@@ -82,7 +82,7 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
 					},
 					'sanitize_callback' => 'sanitize_text_field',
 				),
-			),
+			) + init_plugin_suite_chat_engine_room_rest_args(),
 		)
 	);
 
@@ -94,6 +94,7 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
 			'methods'             => 'GET',
 			'callback'            => 'init_plugin_suite_chat_engine_get_user_status',
 			'permission_callback' => '__return_true',
+			'args'                => init_plugin_suite_chat_engine_room_rest_args(),
 		)
 	);
 
@@ -126,6 +127,7 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
 			'methods'             => 'DELETE',
 			'callback'            => 'init_plugin_suite_chat_engine_rest_unpin_message',
 			'permission_callback' => 'init_plugin_suite_chat_engine_admin_permission_check',
+			'args'                => init_plugin_suite_chat_engine_room_rest_args(),
 		)
 	);
 }
@@ -136,7 +138,13 @@ function init_plugin_suite_chat_engine_register_rest_routes() {
  * @param WP_REST_Request $request Request object (required by REST API callback signature, unused here).
  * @return bool
  */
-function init_plugin_suite_chat_engine_messages_permission_check( $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- $request required by WP_REST_Server callback signature.
+function init_plugin_suite_chat_engine_messages_permission_check( $request ) {
+	// Phòng chat phải có chữ ký hợp lệ (chỉ phòng được tạo từ shortcode).
+	$room = init_plugin_suite_chat_engine_get_request_room( $request );
+	if ( is_wp_error( $room ) ) {
+		return $room;
+	}
+
 	// Check if user is banned.
 	$user_ip   = init_plugin_suite_chat_engine_get_user_ip();
 	$user_id   = is_user_logged_in() ? get_current_user_id() : null;
@@ -165,6 +173,12 @@ function init_plugin_suite_chat_engine_send_permission_check( $request ) {
 		if ( ! $valid ) {
 			return new WP_Error( 'invalid_nonce', __( 'Invalid nonce.', 'init-chat-engine' ), array( 'status' => 403 ) );
 		}
+	}
+
+	// Phòng chat phải có chữ ký hợp lệ.
+	$room = init_plugin_suite_chat_engine_get_request_room( $request );
+	if ( is_wp_error( $room ) ) {
+		return $room;
 	}
 
 	// Check if user is banned.
@@ -229,6 +243,12 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 	$before_id = (int) $request->get_param( 'before_id' );
 	$limit     = (int) $request->get_param( 'limit' );
 
+	// Phòng đã được kiểm tra chữ ký ở permission_callback.
+	$room = init_plugin_suite_chat_engine_get_request_room( $request );
+	if ( is_wp_error( $room ) ) {
+		return $room;
+	}
+
 	// Limit an toàn.
 	if ( $limit <= 0 ) {
 		$limit = 20;
@@ -236,7 +256,9 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 		$limit = 100;
 	}
 
-	$cache_group = 'init_chat_engine';
+	// Generation token PHẢI được đọc TRƯỚC mọi query DB bên dưới - xem
+	// init_plugin_suite_chat_engine_clear_frontend_message_cache().
+	$cache_gen = init_plugin_suite_chat_engine_get_frontend_cache_gen( $room );
 
     // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
@@ -244,101 +266,89 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 
 	// Build query dựa theo tham số.
 	if ( $after_id > 0 ) {
-		// Polling realtime: đại đa số các lần poll KHÔNG có tin nhắn mới (chat không
-		// sôi động liên tục 24/7). Cache 1 giá trị "ID tin nhắn mới nhất hiện có" -
-		// nếu client đã có ID này rồi (after_id >= cache) thì trả rỗng ngay, KHÔNG
-		// chạm DB. Cache được xóa chủ động mỗi khi có tin mới/bị xóa (xem
-		// init_plugin_suite_chat_engine_clear_frontend_message_cache()), TTL chỉ là
-		// lưới an toàn dự phòng.
-		$cached_latest_id = wp_cache_get( 'frontend_latest_id', $cache_group );
+		// Polling realtime: đại đa số các lần poll KHÔNG có tin nhắn mới. Cache "ID
+		// tin mới nhất của phòng" kèm generation token: client đã có ID này rồi
+		// (after_id >= latest) thì trả rỗng ngay, không chạm DB.
+		//
+		// Fix 1.3.9: bản cũ cache con số này KHÔNG kèm token, nên 1 request poll đọc
+		// DB trước khi có tin mới nhưng ghi cache sau khi /send đã xóa cache sẽ ghi
+		// đè lại ID cũ -> mọi client đang ở đúng ID đó bị trả rỗng mãi (kẹt ở
+		// after_id cũ, phải reload trang). Giờ giá trị ghi trễ mang token cũ nên tự
+		// bị loại ở lần đọc kế tiếp.
+		$latest_key = init_plugin_suite_chat_engine_room_key( 'frontend_latest_id', $room );
+		$latest_id  = init_plugin_suite_chat_engine_get_frontend_cache( $latest_key, $cache_gen );
 
-		if ( false !== $cached_latest_id && $after_id >= (int) $cached_latest_id ) {
-			$messages = array();
-		} else {
+		if ( null === $latest_id ) {
+			// MAX(id) dùng index (room, is_deleted, id) - chỉ là 1 lần dò index.
+			$latest_id = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT MAX(id) FROM {$table} WHERE room = %s AND is_deleted = 0",
+					$room
+				)
+			);
+			init_plugin_suite_chat_engine_set_frontend_cache( $latest_key, $latest_id, $cache_gen, 10 * MINUTE_IN_SECONDS );
+		}
+
+		if ( $after_id < (int) $latest_id ) {
 			// Lấy message mới hơn (realtime updates).
-			$results  = $wpdb->get_results(
+			$messages = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT id, user_id, display_name, message, created_at 
                      FROM {$table} 
-                     WHERE id > %d AND is_deleted = 0
+                     WHERE room = %s AND id > %d AND is_deleted = 0
                      ORDER BY id ASC 
                      LIMIT %d",
+					$room,
 					$after_id,
 					$limit
 				),
 				ARRAY_A
 			);
-			$messages = $results;
-
-			if ( ! empty( $messages ) ) {
-				// Có tin mới thật sự -> cache lại ID cao nhất vừa xác nhận được.
-				// Đây là giá trị ĐÃ XÁC NHẬN từ kết quả query thật, an toàn để cache.
-				$newest_id = (int) end( $messages )['id'];
-				wp_cache_set( 'frontend_latest_id', $newest_id, $cache_group, 2 * MINUTE_IN_SECONDS );
-			}
-			// KHÔNG cache khi $messages rỗng. Trước đây nhánh này tự suy ra
-			// "known_max = max(after_id, cached_latest_id)" rồi cache lại - đây là
-			// một race condition: nếu giữa lúc query (thấy rỗng) và lúc set cache ở
-			// đây có 1 request /send khác vừa insert xong và gọi
-			// clear_frontend_message_cache(), thì dòng set cache ở đây sẽ CHẠY SAU
-			// và ghi đè lên, làm cache lại giữ 1 giá trị đã cũ/sai (thấp hơn ID thật
-			// mới nhất). Vì cache 'frontend_latest_id' dùng chung cho MỌI client
-			// (không phân biệt theo after_id), hậu quả là toàn bộ client bị chặn
-			// không thấy tin nhắn mới ở dòng kiểm tra "$after_id >= $cached_latest_id"
-			// phía trên, cho tới khi có 1 tin nhắn KẾ TIẾP xoá cache lần nữa - đúng
-			// hiện tượng "tin thứ 2 không hiện, gửi tin thứ 3 thì cả 2 hiện cùng lúc".
-			// Bỏ cache negative ở đây: cache chỉ được ghi từ kết quả query đã xác nhận
-			// (nhánh if phía trên) hoặc bị xoá chủ động khi có insert/xoá tin, nên
-			// luôn phản ánh đúng trạng thái DB, không suy đoán.
 		}
 
 		// Lưu ý: KHÔNG query thêm 50 tin gần nhất để "refresh timestamp" ở đây nữa.
-		// Trước đây mỗi lần poll (mỗi 2-12s/client) đều chạy thêm 1 query + tính
-		// human_time_diff() cho 50 dòng dù không có gì thay đổi. Hiển thị dạng
-		// "x phút trước" giờ được tính trực tiếp ở client (chat.js) dựa vào
+		// Hiển thị dạng "x phút trước" được tính trực tiếp ở client (chat.js) dựa vào
 		// created_at_iso đã trả sẵn, không cần round-trip lên server.
 
 	} elseif ( $before_id > 0 ) {
 		// Phân trang lùi (older messages) - mỗi client dừng cuộn ở vị trí khác nhau
 		// nên tỉ lệ cache hit sẽ thấp, cố tình không cache nhánh này.
-		$results  = $wpdb->get_results(
+		$messages = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT id, user_id, display_name, message, created_at 
                  FROM {$table} 
-                 WHERE id < %d AND is_deleted = 0
+                 WHERE room = %s AND id < %d AND is_deleted = 0
                  ORDER BY id DESC 
                  LIMIT %d",
+				$room,
 				$before_id,
 				$limit
 			),
 			ARRAY_A
 		);
-		$messages = $results;
 
 	} else {
-		// Lần đầu tải trang: MỌI client mới vào đều gọi đúng 1 dạng query giống hệt
-		// nhau (is_deleted=0 ORDER BY id DESC), chỉ khác $limit (JS dùng limit=15 cho
-		// tải trang, limit=1 cho check pinned message ban đầu). Cache chung 1 lần 50
-		// dòng mới nhất (mức trần limit cho phép ở REST arg), rồi cắt theo $limit thực
-		// tế từng request bằng array_slice - không cần query lại DB cho từng lượt tải
-		// trang mới, dù có bao nhiêu người cùng vào chat một lúc.
-		$cached_latest = wp_cache_get( 'frontend_latest_messages', $cache_group );
+		// Lần đầu tải trang: MỌI client mới vào phòng đều gọi đúng 1 dạng query giống
+		// hệt nhau, chỉ khác $limit. Cache chung 50 dòng mới nhất của phòng (mức trần
+		// limit cho phép ở REST arg), rồi cắt theo $limit bằng array_slice.
+		$latest_messages_key = init_plugin_suite_chat_engine_room_key( 'frontend_latest_messages', $room );
+		$cached_latest       = init_plugin_suite_chat_engine_get_frontend_cache( $latest_messages_key, $cache_gen );
 
-		if ( false === $cached_latest ) {
-			$cached_latest = $wpdb->get_results(
+		if ( ! is_array( $cached_latest ) ) {
+			$cached_latest = (array) $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT id, user_id, display_name, message, created_at 
                      FROM {$table} 
-                     WHERE is_deleted = 0
+                     WHERE room = %s AND is_deleted = 0
                      ORDER BY id DESC 
                      LIMIT %d",
+					$room,
 					50
 				),
 				ARRAY_A
 			);
-			// TTL ngắn chỉ làm lưới an toàn dự phòng - chủ yếu dựa vào việc chủ động
-			// xóa cache mỗi khi có tin mới/bị xóa.
-			wp_cache_set( 'frontend_latest_messages', $cached_latest, $cache_group, 30 );
+			// TTL chỉ làm lưới an toàn - tính đúng đắn dựa vào generation token.
+			init_plugin_suite_chat_engine_set_frontend_cache( $latest_messages_key, $cached_latest, $cache_gen, 5 * MINUTE_IN_SECONDS );
 		}
 
 		$messages = array_slice( $cached_latest, 0, $limit );
@@ -447,15 +457,43 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 	// Update stats (có throttle, tối đa ghi DB 1 lần/phút - xem init.php).
 	init_plugin_suite_chat_engine_touch_last_activity();
 
-	$response = array(
-		'success'        => true,
-		'messages'       => $messages,
-		'count'          => count( $messages ),
-		'has_more'       => count( $messages ) === $limit,
-		'pinned_message' => init_plugin_suite_chat_engine_get_pinned_message(),
+	$response = rest_ensure_response(
+		array(
+			'success'        => true,
+			'messages'       => $messages,
+			'count'          => count( $messages ),
+			'has_more'       => count( $messages ) === $limit,
+			'pinned_message' => init_plugin_suite_chat_engine_get_pinned_message( $room ),
+			'room'           => $room,
+		)
 	);
 
-	return rest_ensure_response( $response );
+	return init_plugin_suite_chat_engine_add_nocache_headers( $response );
+}
+
+/**
+ * Gắn header chống cache cho response REST của chat.
+ *
+ * Request poll của khách (và cả user đăng nhập, vì JS không gửi nonce khi GET)
+ * được WordPress coi là chưa đăng nhập nên KHÔNG tự thêm header no-cache. Khi đó
+ * page cache / CDN (LiteSpeed Cache "Cache REST API", Cloudflare, Varnish, Nginx
+ * FastCGI cache...) có thể cache nguyên URL ?after_id=X và trả về kết quả rỗng
+ * cũ mãi cho mọi client đang ở đúng ID đó.
+ *
+ * @param WP_REST_Response $response Response object.
+ * @return WP_REST_Response
+ */
+function init_plugin_suite_chat_engine_add_nocache_headers( $response ) {
+	foreach ( wp_get_nocache_headers() as $name => $value ) {
+		if ( $value ) {
+			$response->header( $name, $value );
+		}
+	}
+
+	// LiteSpeed Cache tôn trọng header riêng này cho cả REST API.
+	$response->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
+
+	return $response;
 }
 
 /**
@@ -467,8 +505,14 @@ function init_plugin_suite_chat_engine_get_messages( WP_REST_Request $request ) 
 function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) {
 	global $wpdb;
 
-	$settings     = init_plugin_suite_chat_engine_get_all_settings();
-	$allow_guests = ! empty( $settings['allow_guests'] );
+	$room = init_plugin_suite_chat_engine_get_request_room( $request );
+	if ( is_wp_error( $room ) ) {
+		return $room;
+	}
+
+	// Cấu hình hiệu lực của phòng (ghi đè allow_guests / max_messages nếu có).
+	$room_config  = init_plugin_suite_chat_engine_get_room_config( $room );
+	$allow_guests = $room_config['allow_guests'];
 
 	$current_user = wp_get_current_user();
 	$user_id      = $current_user->exists() ? $current_user->ID : null;
@@ -515,9 +559,11 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
 			'ip_address'   => $user_ip,
 			'user_agent'   => $user_agent,
 			'created_at'   => current_time( 'mysql' ),
+			'room'         => $room,
 		),
 		array(
 			'%d',
+			'%s',
 			'%s',
 			'%s',
 			'%s',
@@ -534,41 +580,23 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
 
 	// Có tin mới -> xóa cache "tin mới nhất" phía frontend ngay, đảm bảo mọi client
 	// (kể cả người vừa mở tab) thấy tin này ngay lần poll/tải trang kế tiếp.
-	init_plugin_suite_chat_engine_clear_frontend_message_cache();
+	init_plugin_suite_chat_engine_clear_frontend_message_cache( $room );
 
 	// Danh sách tin ở trang quản trị cũng cần thấy tin mới ngay (không đợi TTL).
 	init_plugin_suite_chat_engine_bump_admin_cache();
 
-	do_action( 'init_plugin_suite_chat_engine_message_saved', $message_id, $message, $user_id, $display_name );
+	do_action( 'init_plugin_suite_chat_engine_message_saved', $message_id, $message, $user_id, $display_name, $room );
 
 	// Update statistics (atomic +1, 1 query mỗi stat thay vì đọc rồi ghi).
 	init_plugin_suite_chat_engine_increment_stat( 'total_messages' );
 	init_plugin_suite_chat_engine_increment_stat( 'messages_today' );
 
-	// Cleanup if over limit (using new soft delete).
-	$max   = isset( $settings['max_messages'] ) ? (int) $settings['max_messages'] : 1000;
-	$total = $wpdb->get_var(
-		"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0"
-	);
-
-	if ( $total > $max ) {
-		$delete_limit = $total - $max;
-		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}init_chatbox_msgs 
-                 SET is_deleted = 1 
-                 WHERE is_deleted = 0 
-                 ORDER BY id ASC 
-                 LIMIT %d",
-				$delete_limit
-			)
-		);
-
-		// Trim tin cũ nhất khi vượt max_messages - thường không đụng tới cache "tin
-		// mới nhất" (đã clear ở trên rồi), nhưng clear thêm lần nữa cho chắc để tránh
-		// trường hợp hiếm: 1 request GET khác chen vào đúng lúc giữa insert và trim,
-		// cache lại dữ liệu trước khi trim.
-		init_plugin_suite_chat_engine_clear_message_cache();
+	// Cleanup if over limit (soft delete) - giới hạn tính riêng cho từng phòng.
+	if ( init_plugin_suite_chat_engine_trim_room( $room, $room_config['max_messages'] ) ) {
+		// Trim tin cũ nhất làm đổi danh sách hiển thị của phòng -> đổi generation
+		// của cache phòng + cache trang quản trị.
+		init_plugin_suite_chat_engine_clear_frontend_message_cache( $room );
+		init_plugin_suite_chat_engine_bump_admin_cache();
 	}
 
 	// Return success with message data.
@@ -588,6 +616,7 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
 				'is_current_user'   => true,
 				'user_type'         => $user_id ? 'registered' : 'guest',
 			),
+			'room'       => $room,
 		)
 	);
 }
@@ -598,8 +627,11 @@ function init_plugin_suite_chat_engine_send_message( WP_REST_Request $request ) 
  * @param WP_REST_Request $request Request object (required by REST API callback signature, unused here).
  * @return WP_REST_Response
  */
-function init_plugin_suite_chat_engine_get_user_status( WP_REST_Request $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- $request required by WP_REST_Server callback signature.
+function init_plugin_suite_chat_engine_get_user_status( WP_REST_Request $request ) {
 	$settings     = init_plugin_suite_chat_engine_get_all_settings();
+	$room         = init_plugin_suite_chat_engine_get_request_room( $request );
+	$room         = is_wp_error( $room ) ? '' : $room;
+	$room_config  = init_plugin_suite_chat_engine_get_room_config( $room );
 	$current_user = wp_get_current_user();
 	$user_ip      = init_plugin_suite_chat_engine_get_user_ip();
 
@@ -614,7 +646,8 @@ function init_plugin_suite_chat_engine_get_user_status( WP_REST_Request $request
 		'user_id'      => $current_user->exists() ? $current_user->ID : 0,
 		'display_name' => $current_user->exists() ? $current_user->display_name : '',
 		'avatar_url'   => $current_user->exists() ? get_avatar_url( $current_user->ID, array( 'size' => 64 ) ) : '',
-		'allow_guests' => ! empty( $settings['allow_guests'] ),
+		'allow_guests' => $room_config['allow_guests'],
+		'room'         => $room,
 		'is_banned'    => (bool) $ban_check,
 		// Chỉ trả các trường cần cho người bị ban, không lộ ID admin đã ban,
 		// IP lưu trong DB hay dữ liệu nội bộ khác của bản ghi ban.
@@ -633,35 +666,42 @@ function init_plugin_suite_chat_engine_get_user_status( WP_REST_Request $request
 		),
 	);
 
-	return rest_ensure_response( $status );
+	return init_plugin_suite_chat_engine_add_nocache_headers( rest_ensure_response( $status ) );
 }
 
 // REMOVED: Online users function - XÓA LUÔN VÌ VÔ DỤNG!
 
 /**
  * Check if there are any messages
+ *
+ * @param string $room Room name ('' = default room).
+ * @return bool
  */
-function init_plugin_suite_chat_engine_has_messages() {
+function init_plugin_suite_chat_engine_has_messages( $room = '' ) {
 	global $wpdb;
 
-	$cache_key   = 'has_messages';
-	$cache_group = 'init_chat_engine';
+	$room      = (string) $room;
+	$cache_key = init_plugin_suite_chat_engine_room_key( 'has_messages', $room );
+	$cache_gen = init_plugin_suite_chat_engine_get_frontend_cache_gen( $room );
 
 	// Try cache first.
-	$cached = wp_cache_get( $cache_key, $cache_group );
-	if ( false !== $cached ) {
+	$cached = init_plugin_suite_chat_engine_get_frontend_cache( $cache_key, $cache_gen );
+	if ( null !== $cached ) {
 		return (bool) $cached;
 	}
 
 	// Query DB.
 	$exists = $wpdb->get_var(
-		"SELECT 1 FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0 LIMIT 1"
+		$wpdb->prepare(
+			"SELECT 1 FROM {$wpdb->prefix}init_chatbox_msgs WHERE room = %s AND is_deleted = 0 LIMIT 1",
+			$room
+		)
 	);
 
 	$result = (bool) $exists;
 
-	// Cache for 1 day (86400 seconds).
-	wp_cache_set( $cache_key, $result, $cache_group, DAY_IN_SECONDS );
+	// Cache for 1 day (86400 seconds) - tự hết hiệu lực khi phòng có thay đổi.
+	init_plugin_suite_chat_engine_set_frontend_cache( $cache_key, $result, $cache_gen, DAY_IN_SECONDS );
 
 	return $result;
 }
@@ -822,8 +862,16 @@ function init_plugin_suite_chat_engine_rest_pin_message( WP_REST_Request $reques
 		return $result;
 	}
 
+	global $wpdb;
+
+	// Tin được ghim vào phòng chứa nó -> trả về tin ghim của đúng phòng đó.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$room = (string) $wpdb->get_var(
+		$wpdb->prepare( "SELECT room FROM {$wpdb->prefix}init_chatbox_msgs WHERE id = %d", $message_id )
+	);
+
 	// Trả về data đầy đủ để JS cập nhật UI ngay, không cần reload.
-	$pinned = init_plugin_suite_chat_engine_get_pinned_message();
+	$pinned = init_plugin_suite_chat_engine_get_pinned_message( $room );
 
 	return rest_ensure_response(
 		array(
@@ -837,13 +885,18 @@ function init_plugin_suite_chat_engine_rest_pin_message( WP_REST_Request $reques
 // Callback: DELETE /pin
 // ----------------------------------------------------------------
 /**
- * Unpin the currently pinned message.
+ * Unpin the currently pinned message of a room.
  *
- * @param WP_REST_Request $request Request object (required by REST API callback signature, unused here).
- * @return WP_REST_Response
+ * @param WP_REST_Request $request Request object.
+ * @return WP_REST_Response|WP_Error
  */
-function init_plugin_suite_chat_engine_rest_unpin_message( WP_REST_Request $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- $request required by WP_REST_Server callback signature.
-	$result = init_plugin_suite_chat_engine_unpin_message();
+function init_plugin_suite_chat_engine_rest_unpin_message( WP_REST_Request $request ) {
+	$room = init_plugin_suite_chat_engine_get_request_room( $request );
+	if ( is_wp_error( $room ) ) {
+		return $room;
+	}
+
+	$result = init_plugin_suite_chat_engine_unpin_message( $room );
 
 	if ( is_wp_error( $result ) ) {
 		return $result;

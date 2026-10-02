@@ -108,6 +108,7 @@ function init_plugin_suite_chat_engine_register_management_page() {
 						'are_you_sure_delete_single' => __( 'Are you sure you want to delete this message?', 'init-chat-engine' ),
 						'are_you_sure_unban'         => __( 'Are you sure you want to unban this user?', 'init-chat-engine' ),
 						'run_cleanup_confirm'        => __( 'Are you sure you want to run cleanup now? This will permanently delete old messages and expired bans.', 'init-chat-engine' ),
+						'delete_room_confirm'        => __( 'This will permanently delete ALL messages in this room. Continue?', 'init-chat-engine' ),
 					),
 					'nonce' => array(
 						'bulk'    => wp_create_nonce( 'bulk_chat_actions' ),
@@ -290,6 +291,27 @@ function init_plugin_suite_chat_engine_render_management_page() {
 		}
 	}
 
+	// Handle delete all messages of a single room.
+	if ( isset( $_GET['action'] ) && 'delete_room_messages' === $_GET['action'] && $get_nonce && wp_verify_nonce( $get_nonce, 'init_chat_delete_room' ) ) {
+		$target_room = init_plugin_suite_chat_engine_get_admin_room_filter();
+
+		if ( null !== $target_room ) {
+			$result = init_plugin_suite_chat_engine_delete_room_messages( $target_room );
+			if ( is_wp_error( $result ) ) {
+				echo '<div class="notice notice-error"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-success"><p>' . esc_html(
+					sprintf(
+						/* translators: 1: number of messages deleted, 2: room name */
+						__( '%1$d messages deleted from room "%2$s".', 'init-chat-engine' ),
+						$result,
+						init_plugin_suite_chat_engine_room_label( $target_room )
+					)
+				) . '</p></div>';
+			}
+		}
+	}
+
 	$active_subtab = isset( $_GET['subtab'] ) ? sanitize_text_field( wp_unslash( $_GET['subtab'] ) ) : 'messages';
 	?>
 	<div class="wrap">
@@ -345,6 +367,13 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 	$current_page = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
 	$offset       = ( $current_page - 1 ) * $per_page;
 
+	// Bộ lọc phòng: dùng điều kiện "( 1 = %d OR room = %s )" để luôn bind giá trị qua
+	// prepare() - khi xem tất cả phòng thì vế đầu đúng, MySQL bỏ qua điều kiện phòng.
+	$room_filter = init_plugin_suite_chat_engine_get_admin_room_filter();
+	$all_rooms   = null === $room_filter ? 1 : 0;
+	$room_value  = null === $room_filter ? '' : $room_filter;
+	$room_cache  = null === $room_filter ? 'all' : 'room:' . $room_filter;
+
 	// Handle search with nonce verification.
 	$search = '';
     // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -362,7 +391,7 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 	$cache_salt = init_plugin_suite_chat_engine_get_admin_cache_salt();
 
 	// Get total count.
-	$cache_key   = 'init_chat_total_messages_' . md5( $search . '|' . $cache_salt );
+	$cache_key   = 'init_chat_total_messages_' . md5( $search . '|' . $room_cache . '|' . $cache_salt );
 	$total_items = wp_cache_get( $cache_key );
 	if ( false === $total_items ) {
 		if ( $search ) {
@@ -371,8 +400,11 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 				$wpdb->prepare(
 					"SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` 
                      WHERE is_deleted = %d 
+                     AND ( 1 = %d OR room = %s )
                      AND (message LIKE %s OR display_name LIKE %s OR ip_address LIKE %s)",
 					0,
+					$all_rooms,
+					$room_value,
 					'%' . $wpdb->esc_like( $search ) . '%',
 					'%' . $wpdb->esc_like( $search ) . '%',
 					'%' . $wpdb->esc_like( $search ) . '%'
@@ -382,8 +414,10 @@ function init_plugin_suite_chat_engine_render_messages_management() {
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$total_items = (int) $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE is_deleted = %d",
-					0
+					"SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE is_deleted = %d AND ( 1 = %d OR room = %s )",
+					0,
+					$all_rooms,
+					$room_value
 				)
 			);
 		}
@@ -394,7 +428,7 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 
 	// Get messages.
 	// Có cả per_page trong key: đổi Screen Options thì không dùng nhầm cache cũ.
-	$cache_key_messages = 'init_chat_messages_' . md5( $search . '|' . $current_page . '|' . $per_page . '|' . $cache_salt );
+	$cache_key_messages = 'init_chat_messages_' . md5( $search . '|' . $room_cache . '|' . $current_page . '|' . $per_page . '|' . $cache_salt );
 	$messages           = wp_cache_get( $cache_key_messages );
 	if ( false === $messages ) {
 		if ( $search ) {
@@ -403,10 +437,13 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 				$wpdb->prepare(
 					"SELECT * FROM `{$wpdb->prefix}init_chatbox_msgs` 
                      WHERE is_deleted = %d 
+                     AND ( 1 = %d OR room = %s )
                      AND (message LIKE %s OR display_name LIKE %s OR ip_address LIKE %s)
                      ORDER BY created_at DESC 
                      LIMIT %d OFFSET %d",
 					0,
+					$all_rooms,
+					$room_value,
 					'%' . $wpdb->esc_like( $search ) . '%',
 					'%' . $wpdb->esc_like( $search ) . '%',
 					'%' . $wpdb->esc_like( $search ) . '%',
@@ -420,9 +457,12 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 				$wpdb->prepare(
 					"SELECT * FROM `{$wpdb->prefix}init_chatbox_msgs` 
                      WHERE is_deleted = %d
+                     AND ( 1 = %d OR room = %s )
                      ORDER BY created_at DESC 
                      LIMIT %d OFFSET %d",
 					0,
+					$all_rooms,
+					$room_value,
 					$per_page,
 					$offset
 				)
@@ -476,9 +516,10 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 				<input type="hidden" name="page" value="init-chat-management">
 				<input type="hidden" name="subtab" value="messages">
 				<?php wp_nonce_field( 'init_chat_search' ); ?>
+				<?php init_plugin_suite_chat_engine_render_room_filter_select( $room_filter ); ?>
 				<input type="search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php esc_attr_e( 'Search messages...', 'init-chat-engine' ); ?>">
 				<input type="submit" class="button" value="<?php esc_attr_e( 'Search', 'init-chat-engine' ); ?>">
-				<?php if ( $search ) : ?>
+				<?php if ( $search || null !== $room_filter ) : ?>
 					<a href="?page=init-chat-management&subtab=messages" class="button"><?php esc_html_e( 'Clear', 'init-chat-engine' ); ?></a>
 				<?php endif; ?>
 			</form>
@@ -533,16 +574,17 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 						<input type="checkbox" id="cb-select-all-1" />
 					</th>
 					<th scope="col" style="width: 15%;"><?php esc_html_e( 'User', 'init-chat-engine' ); ?></th>
-					<th scope="col" style="width: 40%;"><?php esc_html_e( 'Message', 'init-chat-engine' ); ?></th>
-					<th scope="col" style="width: 15%;"><?php esc_html_e( 'Date', 'init-chat-engine' ); ?></th>
-					<th scope="col" style="width: 15%;"><?php esc_html_e( 'IP Address', 'init-chat-engine' ); ?></th>
+					<th scope="col" style="width: 32%;"><?php esc_html_e( 'Message', 'init-chat-engine' ); ?></th>
+					<th scope="col" style="width: 10%;"><?php esc_html_e( 'Room', 'init-chat-engine' ); ?></th>
+					<th scope="col" style="width: 13%;"><?php esc_html_e( 'Date', 'init-chat-engine' ); ?></th>
+					<th scope="col" style="width: 13%;"><?php esc_html_e( 'IP Address', 'init-chat-engine' ); ?></th>
 					<th scope="col" style="width: 15%;"><?php esc_html_e( 'Actions', 'init-chat-engine' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
 				<?php if ( empty( $messages ) ) : ?>
 				<tr>
-					<td colspan="6" class="no-items"><?php esc_html_e( 'No messages found.', 'init-chat-engine' ); ?></td>
+					<td colspan="7" class="no-items"><?php esc_html_e( 'No messages found.', 'init-chat-engine' ); ?></td>
 				</tr>
 				<?php else : ?>
 					<?php foreach ( $messages as $message ) : ?>
@@ -575,6 +617,12 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 								</a>
 							</small>
 						<?php endif; ?>
+					</td>
+					<td>
+						<?php $message_room = isset( $message->room ) ? (string) $message->room : ''; ?>
+						<a href="<?php echo esc_url( add_query_arg( array( 'room_filter' => init_plugin_suite_chat_engine_room_filter_value( $message_room ) ), remove_query_arg( array( 'paged', 'action', '_wpnonce', 'message_id', 'user_id', 'ip', 'name', 'duration' ) ) ) ); ?>">
+							<?php echo esc_html( init_plugin_suite_chat_engine_room_label( $message_room ) ); ?>
+						</a>
 					</td>
 					<td>
 						<abbr title="<?php echo esc_attr( $message->created_at ); ?>">
@@ -652,6 +700,7 @@ function init_plugin_suite_chat_engine_render_messages_management() {
 					</th>
 					<th scope="col"><?php esc_html_e( 'User', 'init-chat-engine' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'Message', 'init-chat-engine' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Room', 'init-chat-engine' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'Date', 'init-chat-engine' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'IP Address', 'init-chat-engine' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'Actions', 'init-chat-engine' ); ?></th>
@@ -798,23 +847,28 @@ function init_plugin_suite_chat_engine_render_banned_management() {
 function init_plugin_suite_chat_engine_render_stats_management() {
 	global $wpdb;
 
+	// Bộ lọc phòng (null = tất cả phòng) - xem render_messages_management().
+	$room_filter = init_plugin_suite_chat_engine_get_admin_room_filter();
+	$all_rooms   = null === $room_filter ? 1 : 0;
+	$room_value  = null === $room_filter ? '' : $room_filter;
+
+	// Key cache gồm phòng đang lọc + salt (đổi mỗi khi dữ liệu tin nhắn đổi).
+	$stats_suffix = current_time( 'Y-m-d' ) . '_' . md5( ( null === $room_filter ? 'all' : 'room:' . $room_filter ) . '|' . init_plugin_suite_chat_engine_get_admin_cache_salt() );
+
 	// Get statistics with caching.
-	$cache_key = 'init_chat_stats_' . current_time( 'Y-m-d' );
+	$cache_key = 'init_chat_stats_' . $stats_suffix;
 	$stats     = wp_cache_get( $cache_key );
 
 	if ( false === $stats ) {
-		$table_name   = $wpdb->prefix . 'init_chatbox_msgs';
-		$banned_table = $wpdb->prefix . 'init_chatbox_banned';
-
 		$stats = array(
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			'total_messages' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE is_deleted = %d", 0 ) ),
+			'total_messages' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE is_deleted = %d AND ( 1 = %d OR room = %s )", 0, $all_rooms, $room_value ) ),
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			'messages_today' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE DATE(created_at) = CURDATE() AND is_deleted = %d", 0 ) ),
+			'messages_today' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE DATE(created_at) = CURDATE() AND is_deleted = %d AND ( 1 = %d OR room = %s )", 0, $all_rooms, $room_value ) ),
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			'total_users'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT user_id) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE user_id IS NOT NULL AND is_deleted = %d", 0 ) ),
+			'total_users'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT user_id) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE user_id IS NOT NULL AND is_deleted = %d AND ( 1 = %d OR room = %s )", 0, $all_rooms, $room_value ) ),
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			'total_guests'   => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE user_id IS NULL AND is_deleted = %d", 0 ) ),
+			'total_guests'   => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE user_id IS NULL AND is_deleted = %d AND ( 1 = %d OR room = %s )", 0, $all_rooms, $room_value ) ),
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			'active_bans'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}init_chatbox_banned` WHERE is_active = %d", 1 ) ),
 		);
@@ -825,11 +879,10 @@ function init_plugin_suite_chat_engine_render_stats_management() {
 	$last_cleanup = init_plugin_suite_chat_engine_get_stat( 'last_cleanup', '' );
 
 	// Get daily message counts for the last 30 days with caching.
-	$daily_cache_key = 'init_chat_daily_stats_' . current_time( 'Y-m-d' );
+	$daily_cache_key = 'init_chat_daily_stats_' . $stats_suffix;
 	$daily_stats     = wp_cache_get( $daily_cache_key );
 
 	if ( false === $daily_stats ) {
-		$table_name = $wpdb->prefix . 'init_chatbox_msgs';
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$daily_stats = $wpdb->get_results(
 			$wpdb->prepare(
@@ -837,11 +890,14 @@ function init_plugin_suite_chat_engine_render_stats_management() {
                  FROM `{$wpdb->prefix}init_chatbox_msgs` 
                  WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY) 
                  AND is_deleted = %d
+                 AND ( 1 = %d OR room = %s )
                  GROUP BY DATE(created_at) 
                  ORDER BY date DESC 
                  LIMIT %d",
 				30,
 				0,
+				$all_rooms,
+				$room_value,
 				30
 			)
 		);
@@ -849,11 +905,10 @@ function init_plugin_suite_chat_engine_render_stats_management() {
 	}
 
 	// Get top users with caching.
-	$top_users_cache_key = 'init_chat_top_users_' . current_time( 'Y-m-d' );
+	$top_users_cache_key = 'init_chat_top_users_' . $stats_suffix;
 	$top_users           = wp_cache_get( $top_users_cache_key );
 
 	if ( false === $top_users ) {
-		$table_name = $wpdb->prefix . 'init_chatbox_msgs';
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$top_users = $wpdb->get_results(
 			$wpdb->prepare(
@@ -861,17 +916,65 @@ function init_plugin_suite_chat_engine_render_stats_management() {
                         MAX(created_at) as last_message
                  FROM `{$wpdb->prefix}init_chatbox_msgs` 
                  WHERE is_deleted = %d 
+                 AND ( 1 = %d OR room = %s )
                  GROUP BY display_name 
                  ORDER BY message_count DESC 
                  LIMIT %d",
 				0,
+				$all_rooms,
+				$room_value,
 				10
 			)
 		);
 		wp_cache_set( $top_users_cache_key, $top_users, '', 3600 ); // Cache for 1 hour.
 	}
+
+	// Tổng quan từng phòng: số tin + hoạt động gần nhất + cấu hình riêng (nếu có).
+	$rooms_cache_key = 'init_chat_rooms_overview_' . md5( init_plugin_suite_chat_engine_get_admin_cache_salt() );
+	$room_rows       = wp_cache_get( $rooms_cache_key );
+
+	if ( false === $room_rows ) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$counted   = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT room, COUNT(*) AS total, MAX(created_at) AS last_message 
+                 FROM `{$wpdb->prefix}init_chatbox_msgs` 
+                 WHERE is_deleted = %d 
+                 GROUP BY room",
+				0
+			),
+			OBJECT_K
+		);
+		$room_rows = array();
+
+		foreach ( init_plugin_suite_chat_engine_get_known_rooms() as $known_room ) {
+			$room_rows[ $known_room ] = array(
+				'total'        => isset( $counted[ $known_room ] ) ? (int) $counted[ $known_room ]->total : 0,
+				'last_message' => isset( $counted[ $known_room ] ) ? $counted[ $known_room ]->last_message : '',
+			);
+		}
+
+		wp_cache_set( $rooms_cache_key, $room_rows, '', 3600 ); // Cache for 1 hour.
+	}
+
+	$rooms_registry = init_plugin_suite_chat_engine_get_rooms_registry();
 	?>
 	<h2><?php esc_html_e( 'Chat Statistics', 'init-chat-engine' ); ?></h2>
+
+	<form method="get" class="init-chat-room-filter-form" style="margin: 10px 0;">
+		<input type="hidden" name="page" value="init-chat-management">
+		<input type="hidden" name="subtab" value="stats">
+		<?php init_plugin_suite_chat_engine_render_room_filter_select( $room_filter ); ?>
+		<input type="submit" class="button" value="<?php esc_attr_e( 'Filter', 'init-chat-engine' ); ?>">
+		<?php if ( null !== $room_filter ) : ?>
+			<strong style="margin-left: 10px;">
+				<?php
+				/* translators: %s: room name */
+				echo esc_html( sprintf( __( 'Showing statistics for room: %s', 'init-chat-engine' ), init_plugin_suite_chat_engine_room_label( $room_filter ) ) );
+				?>
+			</strong>
+		<?php endif; ?>
+	</form>
 	
 	<div class="init-chat-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
 		<div class="init-chat-stat-card" style="background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.04);">
@@ -981,6 +1084,72 @@ function init_plugin_suite_chat_engine_render_stats_management() {
 		
 	</div>
 	
+	<h3><?php esc_html_e( 'Chat Rooms', 'init-chat-engine' ); ?></h3>
+	<table class="wp-list-table widefat fixed striped init-chat-rooms-table">
+		<thead>
+			<tr>
+				<th scope="col"><?php esc_html_e( 'Room', 'init-chat-engine' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Messages', 'init-chat-engine' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Last Activity', 'init-chat-engine' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Guests', 'init-chat-engine' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Message Limit', 'init-chat-engine' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Actions', 'init-chat-engine' ); ?></th>
+			</tr>
+		</thead>
+		<tbody>
+			<?php foreach ( $room_rows as $row_room => $room_row ) : ?>
+				<?php
+				$row_room     = (string) $row_room;
+				$row_config   = init_plugin_suite_chat_engine_get_room_config( $row_room );
+				$row_override = isset( $rooms_registry[ $row_room ] ) ? $rooms_registry[ $row_room ] : array();
+				$row_filter   = init_plugin_suite_chat_engine_room_filter_value( $row_room );
+				?>
+			<tr>
+				<td>
+					<strong><?php echo esc_html( init_plugin_suite_chat_engine_room_label( $row_room ) ); ?></strong>
+					<?php if ( '' !== $row_room ) : ?>
+						<br><code>[init_chatbox room="<?php echo esc_html( $row_room ); ?>"]</code>
+					<?php endif; ?>
+				</td>
+				<td><?php echo esc_html( number_format_i18n( $room_row['total'] ) ); ?></td>
+				<td>
+					<?php
+					if ( $room_row['last_message'] ) {
+						// phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- Cố ý: created_at lưu theo giờ local, so bằng current_time('timestamp') (cũng local).
+						echo esc_html( human_time_diff( strtotime( $room_row['last_message'] ), current_time( 'timestamp' ) ) . ' ' . __( 'ago', 'init-chat-engine' ) );
+					} else {
+						esc_html_e( 'Never', 'init-chat-engine' );
+					}
+					?>
+				</td>
+				<td>
+					<?php echo $row_config['allow_guests'] ? esc_html__( 'Allowed', 'init-chat-engine' ) : esc_html__( 'Not allowed', 'init-chat-engine' ); ?>
+					<?php if ( isset( $row_override['allow_guests'] ) && '' !== $row_override['allow_guests'] ) : ?>
+						<br><small><?php esc_html_e( '(room override)', 'init-chat-engine' ); ?></small>
+					<?php endif; ?>
+				</td>
+				<td>
+					<?php echo esc_html( number_format_i18n( $row_config['max_messages'] ) ); ?>
+					<?php if ( ! empty( $row_override['max_messages'] ) ) : ?>
+						<br><small><?php esc_html_e( '(room override)', 'init-chat-engine' ); ?></small>
+					<?php endif; ?>
+				</td>
+				<td>
+					<a class="button button-small" href="<?php echo esc_url( admin_url( 'admin.php?page=init-chat-management&subtab=messages&room_filter=' . rawurlencode( $row_filter ) ) ); ?>"><?php esc_html_e( 'View Messages', 'init-chat-engine' ); ?></a>
+					<a class="button button-small" href="<?php echo esc_url( admin_url( 'admin.php?page=init-chat-management&subtab=stats&room_filter=' . rawurlencode( $row_filter ) ) ); ?>"><?php esc_html_e( 'Statistics', 'init-chat-engine' ); ?></a>
+					<?php if ( $room_row['total'] > 0 ) : ?>
+						<a class="button button-small init-chat-confirm-delete-room"
+							style="color: #b32d2e; border-color: #b32d2e;"
+							href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=init-chat-management&subtab=stats&action=delete_room_messages&room_filter=' . rawurlencode( $row_filter ) ), 'init_chat_delete_room' ) ); ?>">
+							<?php esc_html_e( 'Delete Room Messages', 'init-chat-engine' ); ?>
+						</a>
+					<?php endif; ?>
+				</td>
+			</tr>
+			<?php endforeach; ?>
+		</tbody>
+	</table>
+
 	<div style="background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px; margin: 20px 0;">
 		<h3><?php esc_html_e( 'Quick Actions', 'init-chat-engine' ); ?></h3>
 		<p>

@@ -9,7 +9,9 @@ defined( 'ABSPATH' ) || exit;
 
 // Get settings from all groups.
 $settings     = init_plugin_suite_chat_engine_get_all_settings();
-$allow_guests = ! empty( $settings['allow_guests'] );
+$chat_room    = isset( $atts['room'] ) ? init_plugin_suite_chat_engine_sanitize_room( $atts['room'] ) : '';
+$room_config  = init_plugin_suite_chat_engine_get_room_config( $chat_room );
+$allow_guests = $room_config['allow_guests'];
 $is_logged_in = is_user_logged_in();
 $login_url    = wp_login_url();
 
@@ -64,6 +66,7 @@ if ( $is_account_age_blocked ) {
 	if ( $container_style ) :
 		?>
 			style="<?php echo esc_attr( $container_style ); ?>"<?php endif; ?>
+	data-room="<?php echo esc_attr( $chat_room ); ?>"
 	data-show-avatars="<?php echo $show_avatars ? 'true' : 'false'; ?>"
 	data-show-timestamps="<?php echo $show_timestamps ? 'true' : 'false'; ?>">
 
@@ -74,7 +77,7 @@ if ( $is_account_age_blocked ) {
 	<?php endif; ?>
 
 	<!-- Message display area - LUÔN HIỂN THỊ -->
-	<div class="init-chatbox-messages<?php echo init_plugin_suite_chat_engine_has_messages() ? ' expand' : ' shrink'; ?>" 
+	<div class="init-chatbox-messages<?php echo init_plugin_suite_chat_engine_has_messages( $chat_room ) ? ' expand' : ' shrink'; ?>" 
 		id="init-chatbox-messages">
 		
 		<!-- Loading indicator -->

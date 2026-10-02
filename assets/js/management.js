@@ -116,6 +116,9 @@
         $(document).on('click', '.init-chat-confirm-cleanup', function (e) {
             if (!window.confirm(InitChatMgmt.i18n.run_cleanup_confirm)) e.preventDefault();
         });
+        $(document).on('click', '.init-chat-confirm-delete-room', function (e) {
+            if (!window.confirm(InitChatMgmt.i18n.delete_room_confirm)) e.preventDefault();
+        });
 
         toggleBulkActions();
     });

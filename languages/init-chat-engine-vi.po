@@ -723,3 +723,57 @@ msgstr "&laquo;"
 
 msgid "&raquo;"
 msgstr "&raquo;"
+
+msgid "%1$d messages deleted from room \"%2$s\"."
+msgstr "Đã xóa %1$d tin nhắn khỏi phòng \"%2$s\"."
+
+msgid "(room override)"
+msgstr "(cấu hình riêng của phòng)"
+
+msgid "All rooms"
+msgstr "Tất cả phòng"
+
+msgid "Allowed"
+msgstr "Cho phép"
+
+msgid "Not allowed"
+msgstr "Không cho phép"
+
+msgid "Chat Rooms"
+msgstr "Phòng chat"
+
+msgid "Default room"
+msgstr "Phòng mặc định"
+
+msgid "Delete Room Messages"
+msgstr "Xóa tin nhắn của phòng"
+
+msgid "Failed to delete messages."
+msgstr "Xóa tin nhắn thất bại."
+
+msgid "Filter"
+msgstr "Lọc"
+
+msgid "Filter by room"
+msgstr "Lọc theo phòng"
+
+msgid "Guests"
+msgstr "Khách"
+
+msgid "Invalid chat room."
+msgstr "Phòng chat không hợp lệ."
+
+msgid "Message Limit"
+msgstr "Giới hạn tin nhắn"
+
+msgid "Room"
+msgstr "Phòng"
+
+msgid "Showing statistics for room: %s"
+msgstr "Đang xem thống kê của phòng: %s"
+
+msgid "This will permanently delete ALL messages in this room. Continue?"
+msgstr "Thao tác này sẽ xóa vĩnh viễn TOÀN BỘ tin nhắn trong phòng này. Tiếp tục?"
+
+msgid "View Messages"
+msgstr "Xem tin nhắn"
