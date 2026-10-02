@@ -4,7 +4,7 @@
 
 **Not just a chatbox. A true Chat Engine for WordPress.**
 
-[![Version](https://img.shields.io/badge/stable-v1.3.8-blue.svg)](https://wordpress.org/plugins/init-chat-engine/)
+[![Version](https://img.shields.io/badge/stable-v1.3.9-blue.svg)](https://wordpress.org/plugins/init-chat-engine/)
 [![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 ![Made with ❤️ in HCMC](https://img.shields.io/badge/Made%20with-%E2%9D%A4%EF%B8%8F%20in%20HCMC-blue)
 
@@ -30,6 +30,7 @@ or any WordPress site that needs real-time conversation.
   - Optimistic sending & “new message” jump button
   - Clean UI with customizable themes
   - Shortcode `[init_chatbox]` for easy embedding
+  - Multiple chat rooms with `[init_chatbox room="..."]`
   - Template override supported (`chatbox.php`)
 
 - **Admin & Moderation**

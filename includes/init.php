@@ -26,10 +26,12 @@ function init_plugin_suite_chat_engine_get_messages_table_sql() {
         is_deleted TINYINT(1) DEFAULT 0,
         ip_address VARCHAR(45) NULL,
         user_agent VARCHAR(255) NULL,
+        room VARCHAR(64) NOT NULL DEFAULT '',
         PRIMARY KEY (id),
         KEY idx_user_id (user_id),
         KEY idx_created_at (created_at),
-        KEY idx_deleted_id (is_deleted, id)
+        KEY idx_deleted_id (is_deleted, id),
+        KEY idx_room_deleted_id (room, is_deleted, id)
     ) $charset_collate;";
 }
 
@@ -82,7 +84,7 @@ function init_plugin_suite_chat_engine_activate() {
 	init_plugin_suite_chat_engine_init_default_stats();
 
 	// Set plugin version.
-	update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.5' );
+	update_option( 'init_plugin_suite_chat_engine_db_version', INIT_PLUGIN_SUITE_CHAT_ENGINE_DB_VERSION );
 
 	// Schedule cleanup event.
 	if ( ! wp_next_scheduled( 'init_chat_engine_cleanup_messages' ) ) {
@@ -147,6 +149,52 @@ function init_plugin_suite_chat_engine_check_db_upgrade() {
 	if ( version_compare( $current_version, '1.3.5', '<' ) ) {
 		init_plugin_suite_chat_engine_migrate_db_1_3_5();
 	}
+
+	// Migration 1.3.9: thêm cột room + index (room, is_deleted, id) cho tính năng
+	// nhiều phòng chat. Tin nhắn cũ nhận room = '' (phòng mặc định) nên vẫn hiển thị
+	// y nguyên ở khung chat hiện tại.
+	if ( version_compare( $current_version, '1.3.9', '<' ) ) {
+		init_plugin_suite_chat_engine_migrate_db_1_3_9();
+	}
+}
+
+/**
+ * Chạy kiểm tra nâng cấp DB sớm ở MỌI request (không chỉ trong wp-admin).
+ *
+ * Từ 1.3.9 frontend (REST /messages, /send) cần cột room ngay sau khi plugin được
+ * cập nhật - kể cả khi cập nhật tự động và chưa có admin nào vào wp-admin. Chi phí
+ * khi đã migrate xong chỉ là 1 lần so sánh phiên bản từ option autoload.
+ *
+ * @return void
+ */
+function init_plugin_suite_chat_engine_maybe_upgrade_db() {
+	$current_version = get_option( 'init_plugin_suite_chat_engine_db_version', '1.0.0' );
+
+	if ( ! version_compare( $current_version, INIT_PLUGIN_SUITE_CHAT_ENGINE_DB_VERSION, '<' ) ) {
+		return;
+	}
+
+	// Khóa ngắn để nhiều request đồng thời không cùng chạy ALTER TABLE.
+	if ( get_transient( 'init_chat_engine_db_upgrading' ) ) {
+		return;
+	}
+
+	set_transient( 'init_chat_engine_db_upgrading', 1, MINUTE_IN_SECONDS );
+	init_plugin_suite_chat_engine_check_db_upgrade();
+	delete_transient( 'init_chat_engine_db_upgrading' );
+}
+
+/**
+ * Migration 1.3.9 – schema-only, an toàn để chạy nhiều lần (dbDelta tự bỏ qua
+ * cột / index đã có). Không đụng tới dữ liệu tin nhắn, stats hay lịch cron.
+ *
+ * @return void
+ */
+function init_plugin_suite_chat_engine_migrate_db_1_3_9() {
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+	dbDelta( init_plugin_suite_chat_engine_get_messages_table_sql() );
+
+	update_option( 'init_plugin_suite_chat_engine_db_version', '1.3.9' );
 }
 
 /**
@@ -189,7 +237,6 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
 	// Trước 1.3.8 hàm này đọc option cũ INIT_PLUGIN_SUITE_CHAT_ENGINE_OPTION (không
 	// còn được trang Settings ghi vào) nên luôn rơi về mặc định 1000/30, bỏ qua
 	// cấu hình thật của admin.
-	$max_messages = (int) init_plugin_suite_chat_engine_get_setting( 'max_messages', 1000 );
 	$cleanup_days = (int) init_plugin_suite_chat_engine_get_setting( 'cleanup_days', 30 );
 
 	$table_name = $wpdb->prefix . 'init_chatbox_msgs';
@@ -213,28 +260,21 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
 		}
 	}
 
-	// Maintain message limit.
+	// Maintain message limit - áp dụng RIÊNG cho từng phòng (từ 1.3.9). Phòng có
+	// thuộc tính max_messages trong shortcode dùng giới hạn riêng, còn lại dùng
+	// Maximum Messages trong Settings.
     // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$total_messages = $wpdb->get_var(
-		"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0"
+	$room_counts = $wpdb->get_results(
+		"SELECT room, COUNT(*) AS total FROM {$wpdb->prefix}init_chatbox_msgs WHERE is_deleted = 0 GROUP BY room"
 	);
 
-	if ( $total_messages > $max_messages ) {
-		$delete_limit = $total_messages - $max_messages;
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query(
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}init_chatbox_msgs 
-                 SET is_deleted = 1 
-                 WHERE is_deleted = 0 
-                 ORDER BY id ASC 
-                 LIMIT %d",
-				$delete_limit
-			)
-		);
+	foreach ( (array) $room_counts as $room_count ) {
+		$room_config = init_plugin_suite_chat_engine_get_room_config( (string) $room_count->room );
 
-		$did_change = true;
+		if ( (int) $room_count->total > $room_config['max_messages'] ) {
+			init_plugin_suite_chat_engine_trim_room( (string) $room_count->room, $room_config['max_messages'] );
+			$did_change = true;
+		}
 	}
 
 	// Clean up expired bans.
@@ -249,6 +289,44 @@ function init_plugin_suite_chat_engine_cleanup_messages() {
 	if ( $did_change ) {
 		init_plugin_suite_chat_engine_clear_message_cache();
 	}
+}
+
+/**
+ * Ẩn (soft delete) các tin cũ nhất của 1 phòng khi vượt quá giới hạn.
+ *
+ * @param string $room         Room name.
+ * @param int    $max_messages Số tin tối đa được giữ lại trong phòng.
+ * @return bool True nếu có tin bị ẩn.
+ */
+function init_plugin_suite_chat_engine_trim_room( $room, $max_messages ) {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$total = (int) $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}init_chatbox_msgs WHERE room = %s AND is_deleted = 0",
+			$room
+		)
+	);
+
+	if ( $total <= $max_messages ) {
+		return false;
+	}
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$wpdb->prefix}init_chatbox_msgs 
+             SET is_deleted = 1 
+             WHERE room = %s AND is_deleted = 0 
+             ORDER BY id ASC 
+             LIMIT %d",
+			$room,
+			$total - $max_messages
+		)
+	);
+
+	return true;
 }
 
 /**
@@ -827,8 +905,8 @@ function init_plugin_suite_chat_engine_check_rate_limit( $user_ip, $user_id = nu
 register_activation_hook( INIT_PLUGIN_SUITE_CHAT_ENGINE_PATH . 'init-chat-engine.php', 'init_plugin_suite_chat_engine_activate' );
 register_deactivation_hook( INIT_PLUGIN_SUITE_CHAT_ENGINE_PATH . 'init-chat-engine.php', 'init_plugin_suite_chat_engine_deactivate' );
 
-// Check for database upgrades on admin_init.
-add_action( 'admin_init', 'init_plugin_suite_chat_engine_check_db_upgrade' );
+// Check for database upgrades (mọi request, xem init_plugin_suite_chat_engine_maybe_upgrade_db()).
+add_action( 'init', 'init_plugin_suite_chat_engine_maybe_upgrade_db', 5 );
 
 // Register cleanup hook.
 add_action( 'init_chat_engine_cleanup_messages', 'init_plugin_suite_chat_engine_cleanup_messages' );
@@ -908,9 +986,9 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
 		// pinned_message vì tin đang ghim (nếu có) giờ cũng không còn tồn tại nữa.
 		init_plugin_suite_chat_engine_clear_message_cache();
 
-		// Bỏ ghim luôn: pinned dùng snapshot lưu riêng trong bảng stats nên nếu chỉ
-		// xóa cache, banner ghim vẫn hiện lại nội dung của tin đã bị xóa sạch.
-		init_plugin_suite_chat_engine_unpin_message();
+		// Bỏ ghim luôn (ở mọi phòng): pinned dùng snapshot lưu riêng trong bảng stats
+		// nên nếu chỉ xóa cache, banner ghim vẫn hiện lại nội dung của tin đã bị xóa.
+		init_plugin_suite_chat_engine_unpin_all_rooms();
 
 		// Ghi log (nếu WP_DEBUG bật).
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -935,8 +1013,45 @@ function init_plugin_suite_chat_engine_delete_all_messages() {
 }
 
 /**
+ * Xóa vĩnh viễn toàn bộ tin nhắn của 1 phòng (chỉ admin).
+ *
+ * @param string $room Room name ('' = default room).
+ * @return int|WP_Error Number of deleted messages.
+ */
+function init_plugin_suite_chat_engine_delete_room_messages( $room ) {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return new WP_Error(
+			'unauthorized',
+			__( 'You do not have permission to perform this action.', 'init-chat-engine' ),
+			array( 'status' => 403 )
+		);
+	}
+
+	global $wpdb;
+
+	$room = init_plugin_suite_chat_engine_sanitize_room( $room );
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$deleted = $wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM {$wpdb->prefix}init_chatbox_msgs WHERE room = %s",
+			$room
+		)
+	);
+
+	if ( false === $deleted ) {
+		return new WP_Error( 'db_error', __( 'Failed to delete messages.', 'init-chat-engine' ) );
+	}
+
+	init_plugin_suite_chat_engine_clear_message_cache();
+	init_plugin_suite_chat_engine_unpin_message( $room );
+
+	return (int) $deleted;
+}
+
+/**
  * Ghim một tin nhắn (chỉ admin).
- * Lưu message_id vào stats table với key 'pinned_message_id'.
+ * Lưu message_id vào stats table với key 'pinned_message_id' (theo từng phòng).
  * Lưu snapshot nội dung để tránh query thêm khi render.
  *
  * @param  int $message_id  ID của tin nhắn cần ghim.
@@ -952,7 +1067,7 @@ function init_plugin_suite_chat_engine_pin_message( int $message_id ) {
 	// Kiểm tra message có tồn tại và chưa bị xoá không.
 	$msg = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->prepare(
-			"SELECT id, user_id, display_name, message, created_at
+			"SELECT id, user_id, display_name, message, created_at, room
              FROM `{$wpdb->prefix}init_chatbox_msgs`
              WHERE id = %d AND is_deleted = 0
              LIMIT 1",
@@ -964,8 +1079,11 @@ function init_plugin_suite_chat_engine_pin_message( int $message_id ) {
 		return new WP_Error( 'not_found', __( 'Message not found.', 'init-chat-engine' ), array( 'status' => 404 ) );
 	}
 
+	// Tin được ghim vào đúng phòng chứa nó.
+	$room = (string) $msg->room;
+
 	// Lưu ID.
-	init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', $message_id );
+	init_plugin_suite_chat_engine_update_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_id', $room ), $message_id );
 
 	// Lưu snapshot (JSON) để GET /messages không cần query thêm.
 	$snapshot = wp_json_encode(
@@ -979,10 +1097,10 @@ function init_plugin_suite_chat_engine_pin_message( int $message_id ) {
 			'pinned_at'    => current_time( 'mysql' ),
 		)
 	);
-	init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', $snapshot );
+	init_plugin_suite_chat_engine_update_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_snapshot', $room ), $snapshot );
 
 	// Xoá cache.
-	wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+	wp_cache_delete( init_plugin_suite_chat_engine_room_key( 'pinned_message', $room ), 'init_chat_engine' );
 
 	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
         // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -1001,17 +1119,20 @@ function init_plugin_suite_chat_engine_pin_message( int $message_id ) {
 /**
  * Bỏ ghim tin nhắn (chỉ admin).
  *
+ * @param string $room Room name ('' = default room).
  * @return true|WP_Error
  */
-function init_plugin_suite_chat_engine_unpin_message() {
+function init_plugin_suite_chat_engine_unpin_message( $room = '' ) {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return new WP_Error( 'unauthorized', __( 'Permission denied.', 'init-chat-engine' ), array( 'status' => 403 ) );
 	}
 
-	init_plugin_suite_chat_engine_update_stat( 'pinned_message_id', '' );
-	init_plugin_suite_chat_engine_update_stat( 'pinned_message_snapshot', '' );
+	$room = (string) $room;
 
-	wp_cache_delete( 'pinned_message', 'init_chat_engine' );
+	init_plugin_suite_chat_engine_update_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_id', $room ), '' );
+	init_plugin_suite_chat_engine_update_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_snapshot', $room ), '' );
+
+	wp_cache_delete( init_plugin_suite_chat_engine_room_key( 'pinned_message', $room ), 'init_chat_engine' );
 
 	return true;
 }
@@ -1028,36 +1149,87 @@ function init_plugin_suite_chat_engine_unpin_message() {
  * @return void
  */
 function init_plugin_suite_chat_engine_maybe_unpin_deleted( $message_ids ) {
-	$pinned_id = (int) init_plugin_suite_chat_engine_get_stat( 'pinned_message_id', 0 );
+	global $wpdb;
 
-	if ( $pinned_id > 0 && in_array( $pinned_id, array_map( 'intval', (array) $message_ids ), true ) ) {
-		init_plugin_suite_chat_engine_unpin_message();
+	$message_ids = array_values( array_filter( array_map( 'intval', (array) $message_ids ) ) );
+
+	if ( empty( $message_ids ) ) {
+		return;
 	}
+
+	$placeholders = implode( ', ', array_fill( 0, count( $message_ids ), '%d' ) );
+
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $placeholders chỉ gồm chuỗi '%d' do code tự sinh, giá trị thật được bind qua prepare().
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$rooms = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT DISTINCT room FROM `{$wpdb->prefix}init_chatbox_msgs` WHERE id IN ( {$placeholders} )",
+			$message_ids
+		)
+	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+
+	foreach ( (array) $rooms as $room ) {
+		$room      = (string) $room;
+		$pinned_id = (int) init_plugin_suite_chat_engine_get_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_id', $room ), 0 );
+
+		if ( $pinned_id > 0 && in_array( $pinned_id, $message_ids, true ) ) {
+			init_plugin_suite_chat_engine_unpin_message( $room );
+		}
+	}
+}
+
+/**
+ * Bỏ ghim ở MỌI phòng (dùng khi xóa sạch toàn bộ tin nhắn).
+ *
+ * @return void
+ */
+function init_plugin_suite_chat_engine_unpin_all_rooms() {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$keys = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT stat_key FROM `{$wpdb->prefix}init_chatbox_stats` WHERE stat_key = %s OR stat_key LIKE %s",
+			'pinned_message_id',
+			$wpdb->esc_like( 'pinned_message_id@' ) . '%'
+		)
+	);
+
+	foreach ( (array) $keys as $key ) {
+		$room = 0 === strpos( $key, 'pinned_message_id@' ) ? substr( $key, strlen( 'pinned_message_id@' ) ) : '';
+		init_plugin_suite_chat_engine_unpin_message( $room );
+	}
+
+	// Phòng mặc định luôn được reset (kể cả khi chưa từng có key).
+	init_plugin_suite_chat_engine_unpin_message( '' );
 }
 
 /**
  * Lấy tin nhắn đang ghim (có cache).
  * Trả về array data hoặc null nếu chưa ghim.
  *
+ * @param string $room Room name ('' = default room).
  * @return array|null
  */
-function init_plugin_suite_chat_engine_get_pinned_message() {
+function init_plugin_suite_chat_engine_get_pinned_message( $room = '' ) {
+	$room        = (string) $room;
 	$cache_group = 'init_chat_engine';
-	$cache_key   = 'pinned_message';
+	$cache_key   = init_plugin_suite_chat_engine_room_key( 'pinned_message', $room );
 	$cached      = wp_cache_get( $cache_key, $cache_group );
 
 	if ( false !== $cached ) {
 		return $cached ? $cached : null; // false = cache miss, '' = no pin.
 	}
 
-	$pinned_id = init_plugin_suite_chat_engine_get_stat( 'pinned_message_id', '' );
+	$pinned_id = init_plugin_suite_chat_engine_get_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_id', $room ), '' );
 
 	if ( empty( $pinned_id ) ) {
 		wp_cache_set( $cache_key, '', $cache_group, 5 * MINUTE_IN_SECONDS );
 		return null;
 	}
 
-	$snapshot_json = init_plugin_suite_chat_engine_get_stat( 'pinned_message_snapshot', '' );
+	$snapshot_json = init_plugin_suite_chat_engine_get_stat( init_plugin_suite_chat_engine_room_key( 'pinned_message_snapshot', $room ), '' );
 
 	if ( ! empty( $snapshot_json ) ) {
 		$data = json_decode( $snapshot_json, true );
@@ -1073,16 +1245,17 @@ function init_plugin_suite_chat_engine_get_pinned_message() {
 		$wpdb->prepare(
 			"SELECT id, user_id, display_name, message, created_at
              FROM `{$wpdb->prefix}init_chatbox_msgs`
-             WHERE id = %d AND is_deleted = 0
+             WHERE id = %d AND is_deleted = 0 AND room = %s
              LIMIT 1",
-			(int) $pinned_id
+			(int) $pinned_id,
+			$room
 		),
 		ARRAY_A
 	);
 
 	if ( ! $msg ) {
-		// Message bị xoá → tự động bỏ ghim.
-		init_plugin_suite_chat_engine_unpin_message();
+		// Message bị xoá → tự động bỏ ghim (chỉ khi có quyền, unpin tự kiểm tra).
+		init_plugin_suite_chat_engine_unpin_message( $room );
 		return null;
 	}
 

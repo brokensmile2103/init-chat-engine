@@ -166,17 +166,107 @@ function init_plugin_suite_chat_engine_clear_message_cache() {
  * dọn tin cũ. Tách riêng khỏi init_plugin_suite_chat_engine_clear_message_cache()
  * (cache riêng cho trang quản trị) vì 2 nhóm cache có key/group khác nhau, nhưng
  * hàm đó vẫn gọi lại hàm này để đảm bảo đổi ở admin thì frontend cũng cập nhật theo.
+ *
+ * Từ 1.3.9 hàm không chỉ xóa key mà còn ĐỔI "thế hệ" (generation token) của cache.
+ * Mọi giá trị cache frontend đều được lưu kèm token tại thời điểm request bắt đầu
+ * đọc DB, và chỉ được dùng lại khi token đó vẫn còn khớp. Nhờ vậy 1 request GET chạy
+ * chậm, đọc DB TRƯỚC khi có tin mới nhưng ghi cache SAU khi tin mới đã xóa cache,
+ * sẽ không thể đè lại dữ liệu cũ làm mọi client bị kẹt ở after_id cũ nữa (lỗi race
+ * condition trên site dùng Redis / Memcached object cache ở 1.3.8 trở về trước).
+ *
+ * @param string|null $room Room vừa thay đổi; null = mọi phòng (thao tác hàng loạt của admin / cron).
+ * @return void
  */
-function init_plugin_suite_chat_engine_clear_frontend_message_cache() {
+function init_plugin_suite_chat_engine_clear_frontend_message_cache( $room = null ) {
 	$cache_group = 'init_chat_engine';
 
-	wp_cache_delete( 'frontend_latest_id', $cache_group );
-	wp_cache_delete( 'frontend_latest_messages', $cache_group );
+	if ( null === $room ) {
+		wp_cache_set( 'frontend_gen_global', wp_generate_uuid4(), $cache_group );
+		$room = '';
+	} else {
+		$room = (string) $room;
+		wp_cache_set( init_plugin_suite_chat_engine_room_key( 'frontend_gen', $room ), wp_generate_uuid4(), $cache_group );
+	}
 
-	// Cờ "có tin nhắn hay chưa" (quyết định class expand/shrink của khung chat khi
-	// render shortcode) - trước đây cache 1 ngày mà không bao giờ bị xóa, nên khung
-	// chat có thể giữ trạng thái "rỗng" cả ngày dù đã có tin mới.
-	wp_cache_delete( 'has_messages', $cache_group );
+	// Vẫn xóa key trực tiếp (cho gọn bộ nhớ cache + tương thích dữ liệu cache cũ dạng
+	// số nguyên của bản trước) - tính đúng đắn đã được đảm bảo bởi generation token.
+	wp_cache_delete( init_plugin_suite_chat_engine_room_key( 'frontend_latest_id', $room ), $cache_group );
+	wp_cache_delete( init_plugin_suite_chat_engine_room_key( 'frontend_latest_messages', $room ), $cache_group );
+	wp_cache_delete( init_plugin_suite_chat_engine_room_key( 'has_messages', $room ), $cache_group );
+	wp_cache_delete( 'known_rooms', $cache_group );
+}
+
+/**
+ * Generation token hiện tại của cache frontend cho 1 phòng (gồm token toàn cục + token phòng).
+ *
+ * PHẢI được đọc TRƯỚC khi query DB, rồi lưu kèm giá trị cache - xem
+ * init_plugin_suite_chat_engine_clear_frontend_message_cache().
+ *
+ * @param string $room Room name.
+ * @return string
+ */
+function init_plugin_suite_chat_engine_get_frontend_cache_gen( $room ) {
+	$cache_group = 'init_chat_engine';
+	$keys        = array( 'frontend_gen_global', init_plugin_suite_chat_engine_room_key( 'frontend_gen', $room ) );
+	$values      = wp_cache_get_multiple( $keys, $cache_group );
+	$parts       = array();
+
+	foreach ( $keys as $key ) {
+		$value = isset( $values[ $key ] ) ? $values[ $key ] : false;
+
+		if ( empty( $value ) ) {
+			// Chưa có (hoặc bị evict): khởi tạo token ngẫu nhiên. Dùng add() để nếu
+			// request khác vừa tạo trước thì dùng chung token của request đó.
+			$value = wp_generate_uuid4();
+
+			if ( ! wp_cache_add( $key, $value, $cache_group ) ) {
+				$existing = wp_cache_get( $key, $cache_group );
+				$value    = $existing ? $existing : $value;
+			}
+		}
+
+		$parts[] = (string) $value;
+	}
+
+	return implode( '|', $parts );
+}
+
+/**
+ * Đọc 1 giá trị cache frontend có kèm generation token.
+ *
+ * @param string $key Cache key.
+ * @param string $gen Generation token đọc được TRƯỚC khi query DB.
+ * @return mixed|null Cached data, or null on miss / stale generation.
+ */
+function init_plugin_suite_chat_engine_get_frontend_cache( $key, $gen ) {
+	$cached = wp_cache_get( $key, 'init_chat_engine' );
+
+	if ( is_array( $cached ) && isset( $cached['gen'] ) && array_key_exists( 'data', $cached ) && $cached['gen'] === $gen ) {
+		return $cached['data'];
+	}
+
+	return null;
+}
+
+/**
+ * Ghi 1 giá trị cache frontend kèm generation token.
+ *
+ * @param string $key  Cache key.
+ * @param mixed  $data Data to cache.
+ * @param string $gen  Generation token đọc được TRƯỚC khi query DB.
+ * @param int    $ttl  TTL in seconds (chỉ là lưới an toàn).
+ * @return void
+ */
+function init_plugin_suite_chat_engine_set_frontend_cache( $key, $data, $gen, $ttl ) {
+	wp_cache_set(
+		$key,
+		array(
+			'gen'  => $gen,
+			'data' => $data,
+		),
+		'init_chat_engine',
+		$ttl
+	);
 }
 
 /**

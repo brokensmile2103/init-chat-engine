@@ -4,7 +4,7 @@ Tags: chat, community, realtime, shortcode, lightweight
 Requires at least: 5.5
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.8
+Stable tag: 1.3.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -24,6 +24,7 @@ GitHub repository: [https://github.com/brokensmile2103/init-chat-engine](https:/
 - Built with 100% REST API and Vanilla JS
 - No jQuery, no bloat – blazing fast
 - Fully embeddable via `[init_chatbox]` shortcode
+- Multiple chat rooms via `[init_chatbox room="..."]` – each room has its own messages, pinned message and limits
 - Guest messaging support (optional)
 - Smart polling system (adaptive 3.5–10s based on activity, up to 20s when the chatbox is scrolled out of view)
 - Browser notifications when new messages arrive
@@ -77,8 +78,17 @@ Shortcode `[init_chatbox]` supports the following attributes:
 - `title` - Add custom chat title
 - `class` - Add custom CSS classes
 - `id` - Set custom container ID
+- `room` - Chat room name (letters, numbers, `-` and `_`). Leave empty for the default room (the main chat, which keeps all existing messages). Each room has its own messages, pinned message and message limit (e.g. `room="vip"`)
+- `allow_guests` - Per-room override of the "Allow guests" setting (`yes`/`no`)
+- `max_messages` - Per-room override of the "Maximum Messages" setting (10–10,000)
 
 Example: `[init_chatbox height="500px" title="Community Chat" theme="modern"]`
+
+Room example: `[init_chatbox room="members" title="Members Lounge" allow_guests="no" max_messages="500"]`
+
+Only one chatbox per page is supported. Room overrides (`allow_guests`, `max_messages`) are saved when the shortcode is displayed on published content (not in drafts or previews), so use the same attributes everywhere a room is embedded.
+
+Shortcode `[init_chat_stats]` also accepts `room` to show statistics for a single room (e.g. `[init_chat_stats room="vip"]`); without it, all rooms are counted.
 
 == Filters for Developers ==
 
@@ -108,6 +118,11 @@ Triggered when a word filter rule blocks a message.
 Extend chat message data (add flags, metadata, user info, etc.).  
 **Applies to:** Backend DB → JSON output  
 **Params:** `array $message_row`, `WP_User|null $user`
+
+**`init_plugin_suite_chat_engine_message_saved`** *(action)*  
+Fired after a message is stored.  
+**Applies to:** POST /send  
+**Params:** `int $message_id`, `string $message`, `int|null $user_id`, `string $display_name`, `string $room` (added in 1.3.9; `''` = default room)
 
 **`init_plugin_suite_chat_engine_ip_headers`**  
 Choose which `$_SERVER` keys are trusted (in priority order) when detecting the visitor IP used for bans and rate limiting. Default keeps the existing list (Cloudflare / proxy headers first, then `REMOTE_ADDR`). Sites not behind a proxy or CDN can return `array( 'REMOTE_ADDR' )` to prevent spoofed `X-Forwarded-For` headers from bypassing IP bans.  
@@ -151,10 +166,28 @@ Yes, use the Rate Limiting setting to control how many messages users can send p
 = Is it translation-ready? =  
 Yes, the plugin is fully translation-ready with Vietnamese translation included. All text strings use proper WordPress internationalization functions.
 
+= Can I have several chat rooms? =  
+Yes (since 1.3.9). Add the `room` attribute: `[init_chatbox room="vip"]`. Rooms are created automatically from the shortcode and every room is isolated: messages, pinned message and message limit. The room name is signed by the server, so visitors cannot post into rooms that don't exist on your site. Bans, rate limiting, word filtering and account age rules are shared by all rooms. Manage rooms under `Chat Engine → Management` (room filter on Recent Messages and Statistics, plus a Chat Rooms overview).
+
 = How do I backup chat data? =  
 Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs` table. Use any WordPress backup plugin or database backup tool.
 
 == Changelog ==
+
+= 1.3.9 – October 2, 2026 =
+- Fix: open chat tabs could get stuck and stop receiving new messages until the page was reloaded (polling kept requesting the same `after_id`), on sites with a persistent object cache such as Redis or Memcached. A slow poll request that read the database just before a new message was sent could write its outdated "latest message ID" into the shared cache *after* the new message had cleared it, so every client already at that ID was told there was nothing new. Frontend cache entries are now tagged with a generation token that changes on every message change, so a late write can never hide newer messages. Reproduced and verified fixed against a real Redis object cache under concurrent requests
+- Fix: `GET /messages` and `GET /user-status` now send `no-cache` headers (plus `X-LiteSpeed-Cache-Control: no-cache`), and the chat script fetches with `cache: 'no-store'`, so page caches / CDNs (LiteSpeed Cache "Cache REST API", Cloudflare, Varnish, Nginx FastCGI cache) and the browser can no longer serve an old empty polling response for the same URL
+- Fix: a request that hung (e.g. after the computer woke from sleep or switched networks) blocked all later polls forever because polling skips while a request is still pending. Requests now time out after 20 seconds and polling resumes automatically
+- Performance: "no new messages" polls are cached safely again (1.3.7 had to disable this to avoid the race above): idle polls on a site with a persistent object cache no longer touch the database at all
+- New: multiple chat rooms. Add `room="..."` to `[init_chatbox]` to create an isolated room with its own messages, pinned message and message limit. Existing messages stay in the default room, so current chatboxes are unchanged (the `id` attribute is still only the HTML container ID)
+- New: room names are signed (HMAC) by the server and printed into the page, so the REST API only accepts rooms that come from a shortcode on your site — nobody can create or spam hidden rooms. Works with page caching
+- New: per-room shortcode overrides `allow_guests="yes|no"` and `max_messages="..."` (only saved from published content, so contributors cannot change a room's rules through drafts or previews)
+- New: Management → Recent Messages has a room filter and a Room column; Management → Statistics can be filtered by room and lists all rooms (message count, last activity, guest access, message limit) with a "Delete Room Messages" action
+- New: `[init_chat_stats room="..."]` shows statistics for a single room
+- New: the "Maximum Messages" limit and the daily cleanup now apply per room
+- Developer: `init_plugin_suite_chat_engine_message_saved` now receives the room as a 5th argument; `GET /messages` and `POST /send` responses include `room`
+- Database: adds a `room` column and a `(room, is_deleted, id)` index to the messages table. The upgrade runs automatically on the first request after updating (also on the frontend, not only in wp-admin) and does not touch existing data
+- New translatable strings for rooms (Vietnamese translation updated)
 
 = 1.3.8 – October 1, 2026 =
 - Fix: the **Rate Limiting** setting was ignored — the limit was read from a legacy option the Settings page no longer writes to, so every site was silently limited to the default 10 messages/minute regardless of what the admin configured. The saved value is now honored (sites that never saved Security settings keep the previous default of 10)
@@ -264,239 +297,7 @@ Chat messages are stored in your WordPress database in the `wp_init_chatbox_msgs
 - Backwards-compatible with existing settings and database schema
 - Security-focused enhancement to mitigate spam, clone accounts, and coordinated war activity
 
-= 1.2.9 – February 13, 2026 =
-- Overhauled **User Ban System** with timezone-aware logic and optimized detection flow
-- Fixed **timezone inconsistency** across ban creation, validation, and display layers
-  - `init_plugin_suite_chat_engine_ban_user()`: now uses `DateTime` with WordPress timezone for precise `expires_at` calculation
-  - `init_plugin_suite_chat_engine_check_user_banned()`: replaced `NOW()` (GMT) with `current_time('mysql')` for accurate expiration checks
-  - `init_plugin_suite_chat_engine_render_banned_message()`: switched to `date_i18n()` to prevent double timezone conversion
-- Improved **ban detection priority** — user accounts are now checked first, IP fallback only when user is not banned
-  - Prevents trivial IP-based bypass when logged-in users are banned
-  - Guest users (no `user_id`) continue to rely on IP-only detection
-- Eliminated redundant dual-condition SQL queries (`user_id OR ip_address`) in favor of sequential checks
-- Ban expiration timestamps now remain consistent across creation → validation → display (e.g., 48-hour ban created at 8:57 AM expires exactly at 8:57 AM, not 3:56 PM)
-- Enhanced WP_DEBUG logging with detailed timestamp comparisons for admin troubleshooting
-- Fully backwards-compatible with existing ban records and database schema
-- Internal security hardening only; no UI or frontend behavioral changes
-
-= 1.2.8 – November 11, 2025 =
-- Hotfix: fixed **Load More (history pagination)** message order becoming inconsistent
-  - **API (`before_id`)**: changed `ORDER BY id` from **ASC → DESC**
-  - **Frontend (Load More)**: removed `.reverse()`, now directly `prepend()` using API DESC order
-  - **Frontend (Initial load)**: unchanged — reverse initial batch then `append()` (old → new)
-  - **Frontend (Realtime / after_id)**: unchanged — API returns ASC, frontend `append()`
-- Result: timeline in the DOM remains strictly **old → new**
-- Minimal change — **no DB schema changes, no UI changes**
-
-= 1.2.7 – November 10, 2025 =
-- Fixed **Load More / Pagination** logic returning messages in reversed order
-- API now consistently outputs messages in **chronological ASC** order across:
-  - Initial load
-  - History pagination (`before_id`)
-  - Realtime polling (`after_id`)
-- No frontend sorting required — FE only append/prepend based on mode
-- Ensures smooth timeline continuity when fetching older batches
-- Internal change only; does **not affect DB schema or UI behavior**
-
-= 1.2.6 – October 20, 2025 =
-- Overhauled **Word Filter Engine** with hardened validation lifecycle
-- Default strategy is now **aggressive substring detection** (catches `https://`, domains, encoded text, spam links, etc.)
-- Fully respects existing Security settings:
-  - `Enable Word Filtering` toggle
-  - `Blocked Words` textarea (one per line, supports Unicode)
-  - `Word Filter Exceptions` (role-based whitelist: Administrators always bypass)
-- Introduced new developer extension hooks (no new UI options):
-  - `init_plugin_suite_chat_engine_word_filter_strategy` — switch filter logic (`substring`, `word`, `regex`)
-  - `init_plugin_suite_chat_engine_blocked_words` — modify blocked word list programmatically
-  - `init_plugin_suite_chat_engine_bypass_filter` — bypass filtering based on custom logic (VIP, IP ranges, etc.)
-  - `init_plugin_suite_chat_engine_word_block_hit` — event fired when a blocked word triggers
-- Improved unicode normalization and internal cleanup of blocked-word lists (removes empty lines and `#comments`)
-- Fully backwards-compatible — no disruption to existing settings or workflows
-- Strengthened message security layer; prevents all major spam patterns (URL, Discord invite, Telegram link, obfuscated characters)
-
-= 1.2.5 – October 18, 2025 =  
-- Added new **“Delete All Messages”** button under **Quick Actions** in the management panel  
-- Feature permanently removes all chat messages from the database with a single click  
-- Protected by full security stack: admin-only capability, nonce verification, and SQL transaction safety  
-- Resets all chat statistics (`total_messages`, `messages_today`, `active_users_today`, etc.) post-deletion  
-- Includes detailed WP_DEBUG logging for admin audit trail (`who`, `when`)  
-- UX-consistent with existing “Run Cleanup Now” button — executes instantly without JS dependency  
-- Designed as a “nuclear cleanup” option for administrators managing public chat environments  
-- No other functional or visual changes; this update focuses solely on administrative maintenance tools  
-
-= 1.2.4 – October 18, 2025 =  
-- Rebuilt **FX Keyword Engine** for per-message precision and zero-DOM overhead  
-- Replaced global `TreeWalker` scanning with on-demand inline FX application during message render  
-- Introduced new internal helpers: `getCompiledFXRules()` and `applyFXInMessageContainer()`  
-- Rules are now compiled once and reused, ensuring stable performance even with large message histories  
-- Removed redundant functions `initChatboxReplaceFXKeywords()`, `safeReplaceFXKeywordsInDOM()`, and `runFXIfHasMessages()`  
-- Eliminated repeated DOM traversals after message batch rendering (initial load, polling, or history fetch)  
-- Maintained full compatibility with external `runEffect()` logic and `FX_KEYWORDS` data structure  
-- Improved keyword detection accuracy using unified regex alternation with named groups  
-- Achieved significant runtime gains — messages now apply FX instantly upon creation  
-- Internal optimization only; no visual or behavioral changes for end users  
-
-= 1.2.3 – October 14, 2025 =
-- Added safe integration hook for cross-plugin Init FX Engine keyword replacement  
-- Chat engine now auto-invokes external DOM keyword highlighter (`replaceFXKeywordsInDOM`) **only when new messages are loaded**  
-- Added conditional wrapper with `typeof` check to prevent errors if the external plugin is not active  
-- Introduced new internal helper: `safeRunFX()` for async idle execution (avoids blocking UI on message bursts)  
-- Implemented new scoped function `initChatboxReplaceFXKeywords()` — optimized DOM scanning limited to `.init-chatbox-text` only  
-- Rewrote FX keyword parser with `TreeWalker` for deep text traversal and regex stability  
-- Eliminated duplicate link generation and ensured idempotent behavior (no double replacements)  
-- Performance improved significantly when many messages are rendered or refreshed in batch  
-- Internal enhancement only — no UI changes; improves plugin compatibility and runtime stability
-
-= 1.2.2 – October 7, 2025 =
-- **Hotfix Release:** removed redundant ban check inside `[init_chatbox]` shortcode  
-- Eliminated secondary `init_plugin_suite_chat_engine_check_user_banned()` call (already handled by shortcode controller)  
-- Prevented duplicate banned-message rendering and minor timezone mismatches  
-- Simplified shortcode logic for better maintainability and consistency with ban middleware  
-- No user-facing behavior change — internal backend cleanup only  
-
-= 1.2.1 – October 7, 2025 =
-- Added role-based word filter exceptions in Security settings  
-- New UI option: **“Word Filter Exceptions”** allows selecting user roles that can bypass blocked-word restrictions  
-- Default exempt role: **Administrator** (others can be toggled via checkboxes)  
-- Enhanced backend sanitization with strict role validation against existing WordPress roles  
-- Updated message validation logic: users in exempt roles can send blocked words without triggering filter  
-- Preserves security for guests and non-exempt roles (still subject to normal word filtering)  
-- Improved localization: added Vietnamese translations for all new settings strings  
-
-= 1.2.0 – October 2, 2025 =
-- Introduced new filter `init_plugin_suite_chat_engine_enrich_message_row` for extending message rows with custom user metadata  
-- Enables themes/plugins to attach extra flags (roles, VIP status, moderation rights, etc.) without touching core logic  
-- Improves flexibility and forward-compatibility of the chat engine API, allowing richer integrations and UI features downstream  
-
-= 1.1.9 – October 1, 2025 =
-- Added optional support for user profile links in chat messages
-- Introduced `profile_url` field in API responses for registered users
-- Provided frontend hook (`initChatEngineMessageElementHook`) to linkify display names if desired
-- Feature is opt-in only; by default, names remain plain text for backward compatibility
-
-= 1.1.8 – September 13, 2025 =
-- Hardened `/send` security for logged-in users: strictly validate `X-WP-Nonce` and block cross-site POST attempts
-- Sanitized inputs on the server before storage: apply `wp_strip_all_tags()` to both `message` and `display_name` (logged-in and guest paths)
-- Rejected empty or non-visible messages: now fails fast on whitespace-/zero-width-/control-character–only content
-- Enforced length limits server-side (pre-insert) to prevent oversized payloads; behavior matches UI constraints
-- Kept output defense-in-depth: responses continue to use `wp_kses_post()` for message rendering
-- Tightened server-side anti-abuse: permission callback rate-limit check remains authoritative (in addition to any client throttling)
-
-= 1.1.7 – September 13, 2025 =
-- Updated URL auto-linking logic to only apply when the link matches the current site domain
-- Prevented external or mismatched-domain links from being auto-converted into `<a>` tags
-- Reduced risk of spammy or malicious links being injected into formatted content
-- Maintained full support for existing markdown-style text formatting features
-- Improved overall content safety and formatting reliability
-
-= 1.1.6 – September 1, 2025 =
-- Updated codebase to fully comply with WordPress Coding Standards (WPCS)
-- Refactored inline documentation and formatting for better readability and maintainability
-- Improved code consistency to align with official WordPress best practices
-- Minor internal cleanups to enhance long-term stability
-
-= 1.1.5 – August 4, 2025 =
-- Enhanced text formatting logic with smarter boundary detection for markdown-style syntax
-- Improved formatting rules to require whitespace boundaries OR string start/end positions
-- Fixed formatting conflicts in code identifiers (e.g., `init_live_search` no longer formats "live")
-- Resolved mathematical expression formatting issues (e.g., `1*2*3 = 6` no longer bolds "2")
-- Updated regex patterns to use OR logic: format when either start OR end has whitespace boundary
-- Enhanced support for edge cases like `*start* and *end*` now properly formats both words
-- Maintained strict content validation: no spaces immediately after opening or before closing markers
-- Added comprehensive capture group handling for multiple regex patterns
-- Improved formatting accuracy while preserving backward compatibility
-- Enhanced user experience with more intuitive and predictable text formatting behavior
-
-= 1.1.4 – August 3, 2025 =
-- Added extensible hook system for enhanced message formatting and customization
-- Introduced `window.initChatEngineFormatHook` for custom text formatting (supports sticker display and theme extensions)
-- Added `window.initChatEngineMessageElementHook` for post-processing message elements after creation
-- Enhanced message rendering pipeline to support external plugins and theme customizations
-- Improved integration capabilities with Init Manga sticker system and other theme features
-- Maintained backward compatibility while providing flexible extension points for developers
-- Optimized hook execution with proper error handling to prevent chat interruptions
-
-= 1.1.3 – August 01, 2025 =
-- Advanced request management system with AbortController to prevent duplicate API calls
-- Real-time timestamp updates: message timestamps now refresh automatically (e.g., "5 minutes" → "6 minutes")
-- Enhanced network error handling with exponential backoff and smart retry mechanism
-- Improved connection stability for slow/unstable networks with intelligent polling intervals
-- Request deduplication system prevents message loading conflicts and UI inconsistencies
-- Network status monitoring with automatic reconnection when connection is restored
-- Better error recovery with consecutive error tracking and adaptive polling frequency
-- Performance optimizations: reduced unnecessary API calls and improved memory management
-- Enhanced user experience with clearer loading states and connection status indicators
-- Robust offline/online detection with proper fallback handling for network interruptions
-
-= 1.1.2 – July 30, 2025 =
-- Complete dark mode system overhaul with comprehensive theme support
-- Enhanced CSS variables system with dedicated light/dark theme variable sets
-- Full component coverage: dark mode now applies to all elements (messages, inputs, buttons, scrollbars, modals)
-- Smart theme detection: auto-detect system dark mode preference with `@media (prefers-color-scheme: dark)`
-- Improved color contrast and accessibility with proper contrast ratios for dark theme
-- Smooth theme transitions with 0.3s transition animations when switching between themes
-
-= 1.1.1 – July 29, 2025 =
-- Resolved infinite scroll loop bug causing chat interface crashes
-- Fixed load more button toggle conflicts in middle scroll positions (50-200px from top)
-- Implemented debounced scroll handling with 100ms stabilization timer
-- Added scroll direction tracking to prevent unnecessary auto-load triggers
-- Improved scroll zone boundaries: auto-load (<30px), manual button (30-200px), hide (>300px)
-- Enhanced state management to prevent redundant UI updates and layout thrashing
-- Added proper timer cleanup on page unload to prevent memory leaks
-- Optimized scroll performance with passive event listeners and reduced DOM queries
-- Fixed scroll button visibility logic to prevent flickering during rapid scrolling
-- Strengthened error handling for edge cases in scroll position calculations
-- Added support for utility classes (uk-hidden, hidden, .ice-hidden)
-- Automatic CSS framework detection and appropriate hide/show class usage
-- Fixed character counter not working for guest users due to duplicate ID names
-- Improved "Load more" button display logic to be more generous but still safe (expanded zone to 400px)
-- Faster UI response time: reduced debounce to 80ms, auto-load delay to 150ms
-
-= 1.1.0 – July 29, 2025 =
-- Major admin panel upgrade with tabbed interface (Basic, Security, Advanced)
-- Added full message management system with search and pagination
-- Introduced user ban/unban system with support for IP and user restrictions
-- Built statistics dashboard with activity charts and engagement metrics
-- Implemented rate limiting control (messages per minute) to prevent spam
-- Added word filter system with custom blocked word list
-- Included auto/manual cleanup tools for old messages
-- Redesigned admin UI with professional styling and responsive support
-- Added connection status indicators and improved error handling
-- Introduced REST API endpoints for admin moderation actions
-- Implemented caching and nonce verification for all admin operations
-- Added full settings validation and sanitization
-- Full i18n support with .pot file and Vietnamese translation included
-
-= 1.0.3 – July 20, 2025 =
-- Added support for inline message formatting: `*bold*`, `_highlight_`, `~strike~`, `^mark^`, and `italic`
-- Reused highlight style `.init-fx-highlight-text` from Init FX Engine (no duplicated CSS)
-- Improved message rendering with safe HTML output
-- Removed redundant `escapeHTML()` call to enable formatting
-- Minor refactor of formatting logic
-
-= 1.0.2 – July 19, 2025 =
-- Added user avatar rendering with fallback support
-- Introduced blinking document title when new messages arrive
-- Added anti-spam cooldown and click-lock on send button
-- Refined guest name workflow and improved avatar integration
-- Enhanced message HTML structure and cleaned up code
-
-= 1.0.1 – July 19, 2025 =
-- Implemented smart polling system with adaptive intervals
-- Added browser notification API support for new messages
-- Improved scroll behavior and scroll-to-bottom logic
-- Enhanced typing state detection and guest name handling
-- Fixed message prepending offset issue and made UI tweaks
-
-= 1.0.0 – July 18, 2025 =
-- Initial release
-- Core chat functionality using REST API (no WebSocket)
-- Guest messaging support with basic identity system
-- Admin settings for message limits and guest permissions
-- Shortcode support with template override
-- Scrollable history with smooth auto-scroll
-- Optimistic message sending with fallback retry
+View full changelog (all versions): [Init Chat Engine – Changelog](https://en.inithtml.com/plugin/init-chat-engine/)
 
 == License ==
 

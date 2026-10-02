@@ -44,6 +44,13 @@ document.addEventListener('DOMContentLoaded', function () {
         enableSounds: InitChatEngineData.enable_sounds,
         maxMessageLength: InitChatEngineData.max_message_length || 500,
         rateLimit: InitChatEngineData.rate_limit || 10,
+        // Phòng chat (1.3.9): '' = phòng mặc định. room_token là chữ ký do server
+        // in sẵn vào trang, bắt buộc phải gửi kèm khi dùng phòng riêng.
+        room: InitChatEngineData.room || '',
+        roomToken: InitChatEngineData.room_token || '',
+        // Request treo quá lâu (máy sleep, đổi mạng...) sẽ bị hủy để không chặn
+        // các lần poll sau (fetchNewMessages bỏ qua khi còn request đang chạy).
+        requestTimeout: 20000,
         i18n: InitChatEngineData.i18n || {}
     };
 
@@ -127,6 +134,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function createManagedRequest(url, options = {}, type = 'fetch') {
         const requestId = generateRequestId();
         const controller = new AbortController();
+        let timedOut = false;
         
         const requestData = {
             id: requestId,
@@ -140,15 +148,33 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Add abort signal to options
         options.signal = controller.signal;
+
+        // Luôn lấy dữ liệu mới từ server, không dùng HTTP cache của trình duyệt
+        // (tránh kẹt ở 1 response rỗng cũ của cùng URL ?after_id=X).
+        if (!options.cache) {
+            options.cache = 'no-store';
+        }
+
+        // Timeout: request treo (vd: sau khi máy sleep / đổi wifi) sẽ bị hủy và
+        // được tính là lỗi mạng -> cơ chế retry / backoff xử lý tiếp như bình thường.
+        const timeoutId = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, config.requestTimeout);
         
         const requestPromise = fetch(url, options)
             .then(response => {
+                clearTimeout(timeoutId);
                 state.pendingRequests.delete(requestId);
                 return response;
             })
             .catch(error => {
+                clearTimeout(timeoutId);
                 state.pendingRequests.delete(requestId);
                 if (error.name === 'AbortError') {
+                    if (timedOut) {
+                        return Promise.reject(new Error('Request timeout'));
+                    }
                     console.debug('Request aborted:', requestId);
                     return Promise.reject(new Error('Request aborted'));
                 }
@@ -166,6 +192,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // không tải được tin nhắn.
     function withQuery(baseUrl, query) {
         return baseUrl + (baseUrl.indexOf('?') === -1 ? '?' : '&') + query;
+    }
+
+    // Thêm tham số phòng (room + room_token) vào URL REST - phòng mặc định thì bỏ qua
+    // để URL giữ nguyên như các bản trước.
+    function withRoom(url) {
+        if (!config.room) return url;
+        return withQuery(url, `room=${encodeURIComponent(config.room)}&room_token=${encodeURIComponent(config.roomToken)}`);
     }
 
     // ===== FX KEYWORD (PER-MESSAGE) =====
@@ -972,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const url = withQuery(config.fetchUrl, `after_id=${state.lastMessageId}`);
+        const url = withRoom(withQuery(config.fetchUrl, `after_id=${state.lastMessageId}`));
         const { promise } = createManagedRequest(url, {}, 'fetch');
         
         promise
@@ -1073,7 +1106,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const scrollHeightBefore = messagesEl.scrollHeight;
         const scrollTopBefore = messagesEl.scrollTop;
 
-        const url = withQuery(config.fetchUrl, `before_id=${state.firstMessageId}&limit=15`);
+        const url = withRoom(withQuery(config.fetchUrl, `before_id=${state.firstMessageId}&limit=15`));
         const { promise } = createManagedRequest(url, {}, 'loadMore');
 
         promise
@@ -1184,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Content-Type': 'application/json',
                 'X-WP-Nonce': InitChatEngineData.nonce
             },
-            body: JSON.stringify({ message, display_name })
+            body: JSON.stringify({ message, display_name, room: config.room, room_token: config.roomToken })
         }, 'send');
 
         promise
@@ -1567,7 +1600,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Load initial messages
         if (loadingEl) showElement(loadingEl);
         
-        const url = withQuery(config.fetchUrl, 'limit=15');
+        const url = withRoom(withQuery(config.fetchUrl, 'limit=15'));
         const { promise } = createManagedRequest(url, {}, 'init');
         
         promise
@@ -1867,7 +1900,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 'Content-Type' : 'application/json',
                 'X-WP-Nonce'   : InitChatEngineData.nonce,
             },
-            body: JSON.stringify( { message_id: messageId } ),
+            body: JSON.stringify( { message_id: messageId, room: config.room, room_token: config.roomToken } ),
         } )
         .then( function ( r ) {
             if ( ! r.ok ) throw new Error( 'HTTP ' + r.status );
@@ -1898,7 +1931,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const unpinBtn = pinnedBanner.querySelector( '.init-chatbox-pinned-unpin' );
         if ( unpinBtn ) unpinBtn.disabled = true;
 
-        fetch( PIN_NAMESPACE_URL + '/pin', {
+        fetch( withRoom( PIN_NAMESPACE_URL + '/pin' ), {
             method  : 'DELETE',
             headers : { 'X-WP-Nonce': InitChatEngineData.nonce },
         } )

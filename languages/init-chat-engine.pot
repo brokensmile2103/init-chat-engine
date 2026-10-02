@@ -717,3 +717,63 @@ msgstr ""
 
 msgid "Connection error while unpinning."
 msgstr ""
+
+msgid "%1$d messages deleted from room \"%2$s\"."
+msgstr ""
+
+msgid "(room override)"
+msgstr ""
+
+msgid "All rooms"
+msgstr ""
+
+msgid "Allowed"
+msgstr ""
+
+msgid "Not allowed"
+msgstr ""
+
+msgid "Chat Rooms"
+msgstr ""
+
+msgid "Default room"
+msgstr ""
+
+msgid "Delete Room Messages"
+msgstr ""
+
+msgid "Failed to delete messages."
+msgstr ""
+
+msgid "Filter"
+msgstr ""
+
+msgid "Filter by room"
+msgstr ""
+
+msgid "Guests"
+msgstr ""
+
+msgid "Invalid chat room."
+msgstr ""
+
+msgid "Message Limit"
+msgstr ""
+
+msgid "Room"
+msgstr ""
+
+msgid "Showing statistics for room: %s"
+msgstr ""
+
+msgid "This will permanently delete ALL messages in this room. Continue?"
+msgstr ""
+
+msgid "View Messages"
+msgstr ""
+
+msgid "Pin this message"
+msgstr ""
+
+msgid "Unpin"
+msgstr ""
