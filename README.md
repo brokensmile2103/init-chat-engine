@@ -10,14 +10,11 @@
 
 ## Overview
 
-Init Chat Engine is a clean and minimal **frontend chatbox plugin** for WordPress,  
-designed for community interaction with a complete set of administrative tools.  
+Init Chat Engine is a clean and minimal **frontend chatbox plugin** for WordPress, designed for community interaction with a complete set of administrative tools.  
 
-Built on REST API + Vanilla JS, it works on any hosting without WebSockets,  
-delivering a lightweight yet powerful chat experience.
+Built on REST API + Vanilla JS, it works on any hosting without WebSockets, delivering a lightweight yet powerful chat experience.
 
-Perfect for communities, forums, fanpages, SaaS dashboards, support widgets,  
-or any WordPress site that needs real-time conversation.
+Perfect for communities, forums, fanpages, SaaS dashboards, support widgets, or any WordPress site that needs real-time conversation.
 
 ## Features
 
@@ -76,5 +73,4 @@ GPLv2 or later — open source, extensible, developer-first.
 
 ## Part of Init Plugin Suite
 
-Init Chat Engine is part of the [Init Plugin Suite](https://en.inithtml.com/init-plugin-suite-minimalist-powerful-and-free-wordpress-plugins/) —  
-a collection of blazing-fast, no-bloat plugins made for WordPress developers who care about quality and speed.
+Init Chat Engine is part of the [Init Plugin Suite](https://en.inithtml.com/init-plugin-suite-minimalist-powerful-and-free-wordpress-plugins/) — a collection of blazing-fast, no-bloat plugins made for WordPress developers who care about quality and speed.
